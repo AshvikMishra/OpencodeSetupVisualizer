@@ -1,0 +1,31 @@
+# Secrets and machine-local state — never commit
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+auth.json
+credentials.json
+service.json
+opencode.db
+opencode.db-*
+*.sqlite
+*.sqlite3
+
+# Local OpenCode project state
+.opencode/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.log
+
+# Playwright CLI test artifacts
+.playwright-cli/
+*.png
+
+# User-specific files
+opencode-dashboard.html
