@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenCode Setup — Live Observability</title>
+<meta name="description" content="Read-only observability dashboard for the actual local OpenCode installation.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@1.50.0/dist/umd/lucide.min.js" integrity="sha384-/sIySnlbVLfPSNdgy7yqanP6+Dv4en7FlBure4Rag0mp480bA2f+nTviC6933zkQ" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<style>
+  :root{
+    --bg:#07090e; --bg-2:#0b0f17; --panel:rgba(18,24,36,.62); --panel-solid:#121826;
+    --edge:rgba(255,255,255,.075); --edge-2:rgba(255,255,255,.13);
+    --ink:#e8edf6; --ink-2:#a7b3c7; --ink-3:#7c8798;
+    --cy:#38e0d0; --vi:#8b7cf6; --am:#f0a92b; --rs:#f2565b; --gr:#3ddc84;
+    --sans:"Fira Sans",ui-sans-serif,system-ui,sans-serif;
+    --mono:"Fira Code",ui-monospace,"Cascadia Code",Consolas,monospace;
+    --r:14px;
+  }
+  *{-webkit-tap-highlight-color:transparent}
+  html{scroll-behavior:smooth;scroll-padding-top:13.5rem}
+  @media (max-width:640px){ html{scroll-padding-top:17rem} }
+  body{
+    background:var(--bg); color:var(--ink); font-family:var(--sans);
+    font-size:15px; line-height:1.55; letter-spacing:-.005em;
+    background-image:
+      radial-gradient(1100px 620px at 12% -12%, rgba(56,224,208,.10), transparent 62%),
+      radial-gradient(900px 540px at 92% 4%, rgba(139,124,246,.11), transparent 60%),
+      linear-gradient(180deg,#07090e 0%,#080b11 40%,#07090e 100%);
+    background-attachment:fixed;
+  }
+  /* browser surfaces — themed, not default */
+  ::selection{background:rgba(56,224,208,.28); color:#fff}
+  :focus-visible{outline:2px solid var(--cy); outline-offset:2px; border-radius:6px}
+  *{scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.16) transparent}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:99px;border:3px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.26);background-clip:content-box}
+  input,textarea{caret-color:var(--cy)}
+  [type=search]::-webkit-search-cancel-button{-webkit-appearance:none}
+
+  .glass{
+    background:var(--panel);
+    -webkit-backdrop-filter:blur(14px) saturate(140%);
+    backdrop-filter:blur(14px) saturate(140%);
+    border:1px solid var(--edge);
+    border-radius:var(--r);
+    box-shadow:0 1px 0 rgba(255,255,255,.05) inset, 0 18px 40px -28px rgba(0,0,0,.9);
+  }
+  .glass-2{background:rgba(255,255,255,.022); border:1px solid var(--edge); border-radius:10px}
+  /* one authored entrance, exponential ease-out, from a visible default */
+  @keyframes rise{from{opacity:0; transform:translate3d(0,14px,0); filter:blur(5px)} to{opacity:1; transform:none; filter:blur(0)}}
+  .rise{animation:rise .62s cubic-bezier(.16,1,.3,1) both}
+  .d1{animation-delay:.05s}.d2{animation-delay:.11s}.d3{animation-delay:.17s}.d4{animation-delay:.23s}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .fade{animation:fade .4s ease both}
+  @keyframes pop{from{opacity:0; transform:translate3d(0,10px,0) scale(.985)} to{opacity:1; transform:none}}
+  .pop{animation:pop .34s cubic-bezier(.16,1,.3,1) both}
+  @keyframes slideL{from{opacity:0; transform:translate3d(26px,0,0)} to{opacity:1; transform:none}}
+  .drawer-in{animation:slideL .32s cubic-bezier(.16,1,.3,1) both}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.42}}
+  .pulse{animation:pulse 2.1s ease-in-out infinite}
+
+  .sec-title{font-size:1.5rem; font-weight:600; letter-spacing:-.028em; text-wrap:balance}
+  .sub{color:var(--ink-2); font-size:.875rem; max-width:68ch; text-wrap:pretty}
+  .lbl{font-family:var(--mono); font-size:.6875rem; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3)}
+  .tnum{font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1}
+  .mono{font-family:var(--mono)}
+  .prose-x{white-space:pre-wrap; word-break:break-word; tab-size:2}
+
+  .chip{
+    display:inline-flex; align-items:center; gap:.3rem; padding:.1rem .44rem;
+    border-radius:999px; font-family:var(--mono); font-size:.6875rem; letter-spacing:.03em;
+    border:1px solid var(--edge-2); color:var(--ink-2); white-space:nowrap;
+    transition:background .18s, border-color .18s, color .18s;
+  }
+  .chip .dot{width:5px;height:5px;border-radius:99px;background:currentColor;flex:none}
+  .st-active{color:var(--gr); border-color:rgba(61,220,132,.34); background:rgba(61,220,132,.08)}
+  .st-avail{color:var(--cy); border-color:rgba(56,224,208,.32); background:rgba(56,224,208,.08)}
+  .st-local{color:var(--vi); border-color:rgba(139,124,246,.34); background:rgba(139,124,246,.09)}
+  .st-plugin{color:var(--am); border-color:rgba(240,169,43,.32); background:rgba(240,169,43,.08)}
+  .st-inactive{color:var(--ink-3); border-color:var(--edge); background:rgba(255,255,255,.03)}
+  .st-warn{color:var(--am); border-color:rgba(240,169,43,.4); background:rgba(240,169,43,.1)}
+  .st-bad{color:var(--rs); border-color:rgba(242,86,91,.4); background:rgba(242,86,91,.1)}
+
+  .card{cursor:pointer; text-align:left; width:100%; transition:border-color .2s, background .2s, transform .2s, box-shadow .2s}
+  .card:hover{border-color:rgba(56,224,208,.34); background:rgba(24,32,47,.78); transform:translateY(-2px); box-shadow:0 1px 0 rgba(255,255,255,.06) inset, 0 24px 46px -30px rgba(0,0,0,.95)}
+  .card:active{transform:translateY(0)}
+  .row{transition:background .16s, color .16s}
+  .row:hover{background:rgba(56,224,208,.07)}
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:.4rem;
+    min-height:38px; padding:.44rem .8rem; border-radius:9px;
+    border:1px solid var(--edge-2); background:rgba(255,255,255,.032);
+    color:var(--ink-2); font-size:.8rem; font-weight:500; font-family:var(--sans);
+    cursor:pointer; transition:all .18s ease;
+  }
+  .btn:hover{background:rgba(56,224,208,.1); border-color:rgba(56,224,208,.4); color:var(--ink)}
+  .btn[aria-pressed="true"],.btn.on{background:rgba(56,224,208,.15); border-color:rgba(56,224,208,.55); color:#cffaf4}
+  .btn:disabled{opacity:.42; cursor:not-allowed}
+
+  .seg{display:inline-flex; padding:3px; gap:2px; border-radius:10px; border:1px solid var(--edge); background:rgba(255,255,255,.03)}
+  .seg .btn{border:1px solid transparent; background:transparent; min-height:32px; padding:.3rem .7rem}
+
+  .tab{border-bottom:2px solid transparent; color:var(--ink-3); cursor:pointer; transition:color .18s, border-color .18s; white-space:nowrap}
+  .tab:hover{color:var(--ink-2)}
+  .tab[aria-selected="true"]{color:var(--cy); border-bottom-color:var(--cy)}
+
+  .bar{height:7px; border-radius:99px; background:rgba(255,255,255,.055); overflow:hidden}
+  .bar > i{display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,var(--cy),var(--vi)); transition:width .7s cubic-bezier(.16,1,.3,1)}
+  .bar.am > i{background:linear-gradient(90deg,var(--am),#f2714a)}
+
+  .drawer{position:fixed; top:0; right:0; height:100dvh; width:min(560px,100vw); z-index:60;
+    background:rgba(10,14,21,.93); -webkit-backdrop-filter:blur(22px) saturate(150%); backdrop-filter:blur(22px) saturate(150%);
+    border-left:1px solid var(--edge-2); box-shadow:-32px 0 70px -30px rgba(0,0,0,.95);
+    display:flex; flex-direction:column; transform:translateX(100%); visibility:hidden;
+    transition:transform .34s cubic-bezier(.16,1,.3,1), visibility .34s}
+  .drawer.open{transform:none; visibility:visible}
+  .scrim{position:fixed; inset:0; background:rgba(4,6,10,.66); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px);
+    z-index:55; opacity:0; visibility:hidden; transition:opacity .3s, visibility .3s}
+  .scrim.open{opacity:1; visibility:visible}
+
+  .kv{display:grid; grid-template-columns:minmax(104px,auto) 1fr; gap:.4rem .9rem; font-size:.8rem}
+  .kv dt{color:var(--ink-3); font-family:var(--mono); font-size:.7rem; letter-spacing:.05em; text-transform:uppercase; padding-top:.12rem}
+  .kv dd{margin:0; color:var(--ink); word-break:break-word; min-width:0}
+
+  .gnode{cursor:pointer; transition:opacity .2s}
+  .gnode:hover .gbox{stroke:var(--cy)}
+  .gbox{fill:rgba(18,24,36,.94); stroke:var(--edge-2); stroke-width:1; transition:stroke .2s}
+  .glabel{fill:var(--ink); font-family:var(--sans); font-size:11.5px; font-weight:500; pointer-events:none}
+  .gsub{fill:var(--ink-3); font-family:var(--mono); font-size:9px; pointer-events:none}
+  .gedge{stroke:rgba(255,255,255,.14); stroke-width:1.1; fill:none}
+  .gedge.dashed{stroke-dasharray:4 4; stroke:rgba(255,255,255,.2)}
+  .glink{stroke:transparent; stroke-width:16; fill:none; cursor:pointer}
+  .glink:hover + .gedge, .gedge.hot{stroke:var(--cy); stroke-width:1.8}
+
+  .scroll-x{overflow-x:auto; overscroll-behavior-x:contain}
+  .tape{background:rgba(0,0,0,.34)}
+  .empty-dash{border:1px dashed rgba(255,255,255,.2); border-radius:var(--r)}
+
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important}
+  }
+  @media (max-width:640px){ .kv{grid-template-columns:1fr; gap:.1rem} .kv dt{padding-top:.55rem} }
+</style>
+</head>
+<body>
+
+<!-- ============================= HEADER ============================= -->
+<header class="sticky top-0 z-40 border-b border-white/10 bg-[rgba(7,9,14,.82)] backdrop-blur-xl">
+  <div class="mx-auto max-w-[1500px] px-4 sm:px-6">
+    <div class="flex items-center gap-3 py-3">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="grid h-9 w-9 flex-none place-items-center rounded-xl border border-cyan-400/30 bg-cyan-400/10">
+          <i data-lucide="activity" class="h-[18px] w-[18px] text-cyan-300" aria-hidden="true"></i>
+        </div>
+        <div class="min-w-0">
+          <h1 class="truncate text-[15px] font-semibold tracking-tight">OpenCode Setup</h1>
+          <p class="lbl truncate" id="hdrMeta">verifying…</p>
+        </div>
+      </div>
+
+      <div class="ml-auto flex items-center gap-2">
+        <span class="chip st-avail hidden sm:inline-flex" title="This HTML is a static snapshot. It runs no shell commands and needs no live OpenCode process.">
+          <span class="dot"></span>static snapshot
+        </span>
+        <button class="btn" id="btnRefresh" title="Re-run in-page filters and search">
+          <i data-lucide="rotate-cw" class="h-4 w-4" aria-hidden="true"></i><span class="hidden sm:inline">Reset</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- search + view toggle -->
+    <div class="flex flex-wrap items-center gap-2 pb-3">
+      <div class="relative min-w-0 flex-1 basis-56">
+        <i data-lucide="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true"></i>
+        <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Search agents, skills, models, config…"
+          aria-label="Global search across all resources"
+          class="h-[38px] w-full rounded-[9px] border border-white/15 bg-white/[.03] pl-9 pr-16 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400/55 focus:bg-white/[.05]">
+        <kbd class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[11px] text-slate-400">/</kbd>
+      </div>
+      <div class="seg" role="group" aria-label="View mode">
+        <button class="btn on" id="vGrid" aria-pressed="true"><i data-lucide="layout-grid" class="h-4 w-4" aria-hidden="true"></i><span class="hidden sm:inline">Grid</span></button>
+        <button class="btn" id="vGraph" aria-pressed="false"><i data-lucide="share-2" class="h-4 w-4" aria-hidden="true"></i><span class="hidden sm:inline">Graph</span></button>
+      </div>
+    </div>
+
+    <nav id="filters" aria-label="Category filters" class="flex flex-wrap items-center gap-1.5 border-t border-white/10 pt-2.5 pb-1"></nav>
+  </div>
+</header>
+
+<main id="main" class="mx-auto max-w-[1500px] px-4 py-7 sm:px-6">
+  <div id="empty" hidden class="glass empty-dash px-6 py-14 text-center">
+    <i data-lucide="search-x" class="mx-auto mb-3 h-8 w-8 text-slate-500" aria-hidden="true"></i>
+    <p class="text-base font-medium">No resource matches that search</p>
+    <p class="sub mx-auto mt-1.5">Nothing was hidden by accident — every entity in this dashboard came from your live OpenCode config, and none of them match.</p>
+    <button class="btn mt-4" onclick="resetAll()"><i data-lucide="x" class="h-4 w-4" aria-hidden="true"></i>Clear search &amp; filters</button>
+  </div>
+  <div id="sections" class="space-y-9"></div>
+</main>
+
+<footer class="mt-6 border-t border-white/10 px-4 py-7 sm:px-6">
+  <div class="mx-auto flex max-w-[1500px] flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-slate-400">
+    <span class="inline-flex items-center gap-1.5"><i data-lucide="shield-check" class="h-3.5 w-3.5 text-emerald-400" aria-hidden="true"></i>Redacted: <span class="mono">service.json → password</span></span>
+    <span class="inline-flex min-w-0 flex-wrap items-center gap-1.5"><i data-lucide="database" class="h-3.5 w-3.5 flex-none text-cyan-400" aria-hidden="true"></i>Sources: <span class="mono break-all">/api/agent</span> <span class="mono break-all">/api/skill</span> <span class="mono break-all">/api/provider</span> <span class="mono break-all">opencode models</span> <span class="mono break-all">opencode mcp list</span> <span class="mono break-all">opencode plugin list</span></span>
+    <span class="mono text-slate-500" id="snapStamp"></span>
+  </div>
+</footer>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="dwTitle" tabindex="-1">
+  <div class="flex items-start gap-3 border-b border-white/10 p-4">
+    <div class="min-w-0 flex-1">
+      <p class="lbl" id="dwKind">detail</p>
+      <h2 id="dwTitle" class="mt-1 break-words text-lg font-semibold tracking-tight"></h2>
+      <div id="dwChips" class="mt-2 flex flex-wrap gap-1.5"></div>
+    </div>
+    <button class="btn flex-none" id="dwClose" aria-label="Close detail panel"><i data-lucide="x" class="h-4 w-4" aria-hidden="true"></i></button>
+  </div>
+  <div class="scroll-y flex-1 overflow-y-auto p-4" id="dwBody"></div>
+  <div class="border-t border-white/10 p-3"><p class="text-[11px] text-slate-500">Press <kbd class="rounded border border-white/15 bg-white/5 px-1 font-mono">Esc</kbd> to close</p></div>
+</aside>
+
+<div id="toast" class="pointer-events-none fixed bottom-5 left-1/2 z-[70] -translate-x-1/2 rounded-lg border border-white/15 bg-[rgba(12,17,26,.96)] px-3.5 py-2 text-[13px] shadow-2xl opacity-0 transition-opacity duration-200" role="status" aria-live="polite"></div>
+
+<script>
+/* ============================================================================
+   SNAPSHOT — the only hand-editable part. Regenerate from live OpenCode:
+     opencode api get /api/agent      -> agents
+     opencode api get /api/skill      -> skills
+     opencode api get /api/provider   -> providers
+     opencode models / mcp list / plugin list
+   Presentation below never touches the filesystem or shell.
+   ========================================================================= */
+const SNAPSHOT = {
+  meta: {
+    /* Every path below is written with the %USERPROFILE% token and rendered literally,
+       so this file carries no hard-coded username and stays shareable. */
+    generated: '2026-10-03',
+    opencodeVersion: '2.0.22',
+    versionEvidence: 'opencode --version',
+    host: 'Windows 11 · PowerShell 5.1',
+    globalConfig: '%USERPROFILE%\\.config\\opencode',
+    projectRoot: '%USERPROFILE%\\projects\\example-project',
+    projectScoped: false,
+    projectNote: 'Project directory verified empty — no .opencode/, no AGENTS.md, no local skills, agents, plugins or MCPs. Global config still applies.',
+    stateDir: '%USERPROFILE%\\.local\\state\\opencode',
+    installPath: '%USERPROFILE%\\AppData\\Roaming\\npm\\node_modules\\@opencode\\cli',
+    apiEvidence: ['/api/agent', '/api/skill', '/api/provider', 'opencode models', 'opencode mcp list', 'opencode plugin list']
+  },
+
+  overview: [
+    { key:'agents',   label:'Agents',            value:7,  of:7,  status:'active', note:'5 primary · 2 subagent',        icon:'bot',          to:'agents' },
+    { key:'skills',   label:'Skills',            value:24, of:24, status:'active', note:'2 built-in · 15 plugin · 7 local', icon:'sparkles',     to:'skills' },
+    { key:'mcps',     label:'MCP servers',       value:0,  of:0,  status:'inactive', note:'none configured — verified',  icon:'plug',          to:'mcps' },
+    { key:'plugins',  label:'Plugins',           value:1,  of:1,  status:'active', note:'superpowers @ 8ca22db',        icon:'package',       to:'plugins' },
+    { key:'providers',label:'Providers',         value:1,  of:1,  status:'active', note:'OpenCode Zen only',            icon:'cloud',         to:'providers' },
+    { key:'models',   label:'Available models',  value:10, of:10, status:'active', note:'opencode/* provider',           icon:'cpu',           to:'providers' },
+    { key:'project',  label:'Project-local',     value:0,  of:0,  status:'inactive', note:'empty project dir',           icon:'folder',        to:'project' }
+  ],
+
+  agents: [
+    { id:'build', name:'Build', mode:'primary', visible:true, builtIn:true,
+      role:'Default agent. Executes tools based on configured permissions.',
+      model:'unset (inherits session default)', provider:'unset', tools:null,
+      deny:['browser:*'], ask:['external_directory:*','read:*.env','read:*.env.*'],
+      permCount:11, source:'OpenCode built-in (no custom agent files found on disk)' },
+    { id:'general', name:'General', mode:'subagent', visible:true, builtIn:true,
+      role:'General-purpose agent for researching complex questions and executing multi-step tasks. Runs multiple independent units of work in parallel.',
+      model:'unset (inherits session default)', provider:'unset', tools:null,
+      deny:['question:*','subagent:*','browser:*'], ask:['external_directory:*','read:*.env','read:*.env.*'],
+      permCount:12, source:'OpenCode built-in' },
+    { id:'explore', name:'Explore', mode:'subagent', visible:true, builtIn:true,
+      role:'Fast read-only codebase search by file pattern or keyword. Accepts thoroughness quick / medium / very thorough.',
+      model:'unset (inherits session default)', provider:'unset', tools:['grep','glob','read','webfetch','websearch'],
+      deny:['*:*','subagent:*','browser:*'], ask:['external_directory:*','read:*.env','read:*.env.*'],
+      permCount:25, source:'OpenCode built-in' },
+    { id:'plan', name:'Plan', mode:'primary', visible:true, builtIn:true,
+      role:'Read-only agent for exploring the codebase and planning before implementation. edit is denied except under the plan directory.',
+      model:'unset (inherits session default)', provider:'unset', tools:null,
+      deny:['edit:*','browser:*'], ask:['external_directory:*','read:*.env','read:*.env.*'],
+      permCount:14, source:'OpenCode built-in' },
+    { id:'compaction', name:'Compaction', mode:'primary', visible:false, builtIn:true,
+      role:'Internal context-compaction agent. Hidden from the agent picker.',
+      model:'unset (inherits session default)', provider:'unset', tools:null,
+      deny:['browser:*'], ask:['external_directory:*','read:*.env','read:*.env.*'],
+      permCount:10, source:'OpenCode built-in (hidden)' },
+    { id:'title', name:'Title', mode:'primary', visible:false, builtIn:true,
+      role:'Internal session-title generator. All tools denied.',
+      model:'unset (inherits session default)', provider:'unset', tools:null,
+      deny:['*:*','browser:*'], ask:['external_directory:*','read:*.env','read:*.env.*'],
+      permCount:11, source:'OpenCode built-in (hidden)' },
+    { id:'summary', name:'Summary', mode:'primary', visible:false, builtIn:true,
+      role:'Internal session summarizer. All tools denied.',
+      model:'unset (inherits session default)', provider:'unset', tools:null,
+      deny:['*:*','browser:*'], ask:['external_directory:*','read:*.env','read:*.env.*'],
+      permCount:11, source:'OpenCode built-in (hidden)' }
+  ],
+
+  mcps: [],
+  mcpEvidence: 'opencode mcp list → "No MCP servers configured". opencode.json contains no mcp key. Historical log entries reference a server named "roblox" with tools=28; that config is no longer on disk, so it is not rendered as an entity.',
+
+  skills: [
+    { name:'OpenCode', scope:'builtin', status:'active', chars:12464, descChars:455, autoinvoke:true,
+      desc:'Reference guide for OpenCode itself: configuration, agents, commands, skills, tools, permissions, MCP servers, providers, models, themes, CLI, TUI and plugins.',
+      path:'/builtin/opencode.md' },
+    { name:'Report', scope:'builtin', status:'active', chars:4658, descChars:168, autoinvoke:true,
+      desc:'Collect standard diagnostics, add user-specific reproduction context, and publish an OpenCode issue with GitHub CLI.',
+      path:'/builtin/report.md' },
+
+    { name:'brainstorming', scope:'plugin', status:'active', chars:17306, descChars:198, autoinvoke:true,
+      desc:'Required before any creative work — features, components, functionality, behavior changes. Explores intent and design before implementation.', path:'superpowers/skills/brainstorming/SKILL.md' },
+    { name:'diagnosing-superpowers', scope:'plugin', status:'active', chars:6474, descChars:379, autoinvoke:true,
+      desc:'Post-mortem when a superpowers session went wrong: repeated work, ignored plans, stumbles, poor results, or a skill that did not fire.', path:'superpowers/skills/diagnosing-superpowers/SKILL.md' },
+    { name:'dispatching-parallel-agents', scope:'plugin', status:'active', chars:5916, descChars:106, autoinvoke:true,
+      desc:'Use when facing two or more independent tasks that can be worked on without shared state or sequential dependencies.', path:'superpowers/skills/dispatching-parallel-agents/SKILL.md' },
+    { name:'executing-plans', scope:'plugin', status:'active', chars:20189, descChars:172, autoinvoke:true,
+      desc:'Execute an implementation plan inline in the current session as the implementer, when no subagent tool is available.', path:'superpowers/skills/executing-plans/SKILL.md' },
+    { name:'finishing-a-development-branch', scope:'plugin', status:'active', chars:7621, descChars:101, autoinvoke:true,
+      desc:'Decide how to integrate completed work once implementation is done and tests pass.', path:'superpowers/skills/finishing-a-development-branch/SKILL.md' },
+    { name:'receiving-code-review', scope:'plugin', status:'active', chars:5919, descChars:234, autoinvoke:true,
+      desc:'Verify and rigorously act on incoming code-review feedback before implementing it, especially when the feedback is unclear.', path:'superpowers/skills/receiving-code-review/SKILL.md' },
+    { name:'requesting-code-review', scope:'plugin', status:'active', chars:2819, descChars:107, autoinvoke:true,
+      desc:'Verify work meets requirements when completing tasks or implementing major features before merging.', path:'superpowers/skills/requesting-code-review/SKILL.md' },
+    { name:'subagent-driven-development', scope:'plugin', status:'active', chars:32436, descChars:85, autoinvoke:true,
+      desc:'Execute implementation plans whose tasks are independent, using subagents within the current session.', path:'superpowers/skills/subagent-driven-development/SKILL.md' },
+    { name:'systematic-debugging', scope:'plugin', status:'active', chars:9325, descChars:91, autoinvoke:true,
+      desc:'Required when hitting any bug, test failure or unexpected behavior — before proposing a fix.', path:'superpowers/skills/systematic-debugging/SKILL.md' },
+    { name:'test-driven-development', scope:'plugin', status:'active', chars:9447, descChars:79, autoinvoke:true,
+      desc:'Required when implementing any feature or bugfix, before writing implementation code.', path:'superpowers/skills/test-driven-development/SKILL.md' },
+    { name:'using-git-worktrees', scope:'plugin', status:'active', chars:6569, descChars:196, autoinvoke:true,
+      desc:'Establish an isolated workspace via native tools or a git worktree before feature work or plan execution.', path:'superpowers/skills/using-git-worktrees/SKILL.md' },
+    { name:'verification-before-completion', scope:'plugin', status:'active', chars:3362, descChars:225, autoinvoke:true,
+      desc:'Run verification commands and confirm output before claiming work is complete, fixed or passing.', path:'superpowers/skills/verification-before-completion/SKILL.md' },
+    { name:'writing-plans', scope:'plugin', status:'active', chars:10209, descChars:84, autoinvoke:true,
+      desc:'Write a multi-step implementation plan before touching code when a spec or requirement already exists.', path:'superpowers/skills/writing-plans/SKILL.md' },
+    { name:'writing-skills', scope:'plugin', status:'active', chars:26483, descChars:97, autoinvoke:true,
+      desc:'Create new skills, edit existing ones, and verify skills work before deployment.', path:'superpowers/skills/writing-skills/SKILL.md' },
+
+    { name:'using-superpowers', scope:'local', status:'active', chars:2992, descChars:154, autoinvoke:true,
+      desc:'Establishes how to find and use skills at conversation start; requires a skill invocation before any response, including clarifying questions.',
+      path:'%USERPROFILE%\\.agents\\skills\\using-superpowers\\SKILL.md',
+      note:'Name collides with the superpowers plugin copy. OpenCode resolves the .agents/skills path and does not expose the plugin copy as a separate capability — counted once.' },
+    { name:'find-skills', scope:'local', status:'active', chars:5129, descChars:303, autoinvoke:true,
+      desc:'Discover and install agent skills when the user asks how to do something or is looking for a skill to extend capabilities.',
+      path:'%USERPROFILE%\\.agents\\skills\\find-skills\\SKILL.md', source:'vercel-labs/skills' },
+    { name:'grill-me', scope:'local', status:'inactive', chars:242, descChars:51, autoinvoke:false,
+      desc:'A relentless interview to sharpen a plan or design.',
+      path:'%USERPROFILE%\\.agents\\skills\\grill-me\\SKILL.md', source:'mattpocock/skills',
+      note:'Frontmatter sets disable-model-invocation and metadata.opencode.autoinvoke=false. Model cannot invoke it; user-invocable only.' },
+    { name:'grilling', scope:'local', status:'active', chars:1798, descChars:152, autoinvoke:true,
+      desc:'Grill the user relentlessly about a plan, decision or idea, or on any grill trigger phrase.',
+      path:'%USERPROFILE%\\.agents\\skills\\grilling\\SKILL.md', source:'mattpocock/skills' },
+    { name:'stop-slop', scope:'local', status:'active', chars:2400, descChars:119, autoinvoke:true,
+      desc:'Remove AI writing patterns from prose when drafting, editing or reviewing text.',
+      path:'%USERPROFILE%\\.agents\\skills\\stop-slop\\SKILL.md', source:'hardikpandya/stop-slop' },
+    { name:'ui-ux-pro-max', scope:'local', status:'active', chars:15509, descChars:495, autoinvoke:true,
+      desc:'UI/UX design intelligence for web, mobile and desktop: styles, palettes, font pairings, UX guidelines, icons, motion presets, chart types and stacks.',
+      path:'%USERPROFILE%\\.agents\\skills\\ui-ux-pro-max\\SKILL.md', source:'nextlevelbuilder/ui-ux-pro-max-skill' },
+    { name:'impeccable', scope:'local', status:'active', chars:10705, descChars:895, autoinvoke:true,
+      desc:'Design and polish pass for any frontend interface: UX review, hierarchy, a11y, theming, motion, typography, empty states and design systems.',
+      path:'%USERPROFILE%\\.config\\opencode\\skills\\impeccable\\SKILL.md', source:'pbakaus/impeccable',
+      version:'4.3.1', note:'Also registered as a slash command in commands/impeccable.md (agent: build, subtask: true).' },
+    { name:'karpathy-guidelines', scope:'local', status:'active', chars:2300, descChars:219, autoinvoke:true,
+      desc:'Reduce common LLM coding mistakes: avoid overcomplication, make surgical changes, surface assumptions, define verifiable success criteria.',
+      path:'%USERPROFILE%\\.config\\opencode\\skills\\karpathy-guidelines\\SKILL.md',
+      note:'Absent from skills-lock.json and skill-sources.json — untracked by the router, so it survives pruning only by accident.' }
+  ],
+
+  plugins: [
+    { name:'superpowers', version:'6.4.2', commit:'8ca22db', status:'active',
+      source:'superpowers@git+https://github.com/obra/superpowers.git',
+      declaredIn:'opencode.json → plugins[]',
+      entry:'.opencode/plugins/superpowers.js',
+      resolved:'%USERPROFILE%\\.cache\\opencode\\npm\\git-superpowers-0958a5557860\\1790711835417\\node_modules\\superpowers',
+      skillCount:15,
+      provides:['brainstorming','diagnosing-superpowers','dispatching-parallel-agents','executing-plans','finishing-a-development-branch','receiving-code-review','requesting-code-review','subagent-driven-development','systematic-debugging','test-driven-development','using-git-worktrees','verification-before-completion','writing-plans','writing-skills','using-superpowers'],
+      note:'`opencode plugin list` confirms it as loaded. One of its 15 skills (using-superpowers) is shadowed by the .agents/skills copy and does not surface separately, so 14 are credited here.' }
+  ],
+
+  providers: [
+    { id:'opencode', name:'OpenCode Zen', models:10, status:'active',
+      note:'Only provider reachable. Catalog endpoint https://models.opencode.ai/api.json logged DNS, expired-certificate and timeout failures in late September; the list below is what `opencode models` returned today.',
+      modelList:['opencode/big-pickle','opencode/fledge-alpha-free','opencode/ling-3.0-flash-fin-free','opencode/ling-3.1-flash-free','opencode/longcat-2.5-preview-free','opencode/mimo-v2.6-flash-free','opencode/muse-spark-1.3-contributor-free','opencode/nemotron-3-ultra-free','opencode/nemotron-3.5-lightning-free','opencode/space-bunny-free'],
+      recent:['opencode/space-bunny-free'], favorites:[], variant:'default',
+      source:'opencode models · ~/.local/state/opencode/model.json' }
+  ],
+
+  project: {
+    exists:true, root:'%USERPROFILE%\\projects\\example-project', entries:0,
+    localSkills:[], localAgents:[], localPlugins:[], localMcps:[], localConfig:[],
+    note:'Verified empty by directory listing and a hidden-file recursive glob. Not a git repository. Global config layers on top regardless.'
+  },
+
+  commands: [
+    { name:'impeccable', file:'%USERPROFILE%\\.config\\opencode\\commands\\impeccable.md', bytes:1048,
+      agent:'build', subtask:true, status:'active',
+      body:'Call skill({ name: "impeccable" }) and follow its `Setup` and `Commands` sections to handle $ARGUMENTS.' }
+  ],
+
+  automation: [
+    { name:'skillctl router', status:'active', kind:'global CLI script', bytes:20578,
+      path:'%USERPROFILE%\\.config\\opencode\\scripts\\skillctl.mjs',
+      desc:'Project-scoped skill router referenced by AGENTS.md. Routes a task summary to an approved skill via `route`, and records `log` / `note` / `install` activity. Reads capabilities.json and skill-sources.json.' },
+    { name:'capabilities.json', status:'active', kind:'routing table', bytes:1811,
+      path:'%USERPROFILE%\\.config\\opencode\\capabilities.json',
+      desc:'Maps three capability keys to covering skills: frontend-ui → impeccable, ui-ux-pro-max; motion → impeccable, ui-ux-pro-max; browser-testing → playwright-cli.' },
+    { name:'skill-sources.json', status:'active', kind:'approved sources', bytes:2093,
+      path:'%USERPROFILE%\\.config\\opencode\\skill-sources.json',
+      desc:'Seven approved git sources with skillsPath and verification evidence. approvedOnly:true gates every install.' },
+    { name:'skills-lock.json', status:'active', kind:'lockfile', bytes:null,
+      path:'%USERPROFILE%\\skills-lock.json',
+      desc:'Pins computed hashes for skills installed under ~/..agents/skills. Covers find-skills, grill-me, stop-slop and others; karpathy-guidelines is absent.' },
+    { name:'impeccable detect hook', status:'inactive', kind:'design detector', bytes:null,
+      path:'(not active for this session)',
+      desc:'The impeccable skill reports that no automatic detector hook is registered for this project, so its mechanical UI checks must be run manually.' }
+  ],
+
+  warnings: [
+    { level:'warn', title:'browser-testing capability points at an uninstalled skill',
+      detail:'capabilities.json declares browser-testing covered_by playwright-cli, but no playwright-cli SKILL.md exists in .config\\opencode\\skills, .agents\\skills or the plugin cache. It exists only as a source mirror under ~/.cache/opencode/skill-sources/playwright-cli. Routing that capability reports COVERED and then fails at invoke time.',
+      source:'capabilities.json vs filesystem' },
+    { level:'warn', title:'service.json stores a local service password in plaintext',
+      detail:'A single `password` key holds a live local service secret, duplicated across ~/.config/opencode/service.json and ~/.local/state/opencode/service.json. Value is redacted here. Consider an env var or credential store if this directory is ever synced.',
+      source:'%USERPROFILE%\\.config\\opencode\\service.json' },
+    { level:'warn', title:'karpathy-guidelines is untracked by the router',
+      detail:'The skill lives in the global skills directory but appears in neither skills-lock.json nor skill-sources.json, so skillctl install/update does not manage it.',
+      source:'skills-lock.json, skill-sources.json' },
+    { level:'warn', title:'impeccable resolves only via its global path here',
+      detail:'SKILL.md hardcodes .opencode/skills/impeccable/scripts/impeccable. This project has no .opencode directory, so only the global launcher under ~/.config/opencode/skills/impeccable/scripts/impeccable.cmd resolves.',
+      source:'skills/impeccable/SKILL.md allowed-tools' },
+    { level:'info', title:'Model catalog endpoint has been failing',
+      detail:'Logs from 2026-09-27 to 2026-09-29 show getaddrinfo ENOTFOUND, an expired certificate, and a TimeoutError against models.opencode.ai. The 10 models listed here are what the CLI returned today.',
+      source:'~/.local/share/opencode/log/opencode.log' },
+    { level:'info', title:'A previously configured MCP is gone',
+      detail:'The log references a server named roblox connecting with tools=28 across several projects, and a skill-audit entry from 2026-09-30 compared an mcp block that no longer exists on disk. Not rendered as a current entity.',
+      source:'opencode.log, current opencode.json' }
+  ],
+
+  context: {
+    note:'Approximate. Uses the chars/4 rule. Verified against /api/skill character counts and on-disk byte sizes.',
+    alwaysResident:[
+      { label:'AGENTS.md', bytes:1021, tokens:255, kind:'always',
+        detail:'Global skill-router instructions at ~/.config/opencode/AGENTS.md, 17 lines. Loaded every session.' },
+      { label:'Skill metadata (name + description)', bytes:5570, tokens:1392, kind:'always',
+        detail:'Frontmatter of all 24 skills returned by /api/skill, names included. This is the index OpenCode keeps resident to decide what to load.' }
+    ],
+    onDemand:[
+      { label:'Skill bodies (on load)', bytes:222272, tokens:55568, kind:'ondemand',
+        detail:'Full SKILL.md text for 24 skills. Enter context only when the skill is invoked. Largest: subagent-driven-development 32,436 chars, writing-skills 26,483, executing-plans 20,189.' },
+      { label:'Built-in OpenCode reference', bytes:12464, tokens:3116, kind:'ondemand',
+        detail:'/builtin/opencode.md — the OpenCode self-reference skill body.' }
+    ],
+    none:[
+      { label:'MCP tool schemas', bytes:0, tokens:0, kind:'none',
+        detail:'Zero MCP servers configured, so no schema is ever injected.' },
+      { label:'Project-local instructions', bytes:0, tokens:0, kind:'none',
+        detail:'No project AGENTS.md, CLAUDE.md or .opencode directory exists.' }
+    ],
+    cacheFootprint:[
+      { label:'superpowers plugin cache', bytes:170125, note:'15 SKILL.md files on disk' },
+      { label:'~/.agents/skills', bytes:29800, note:'6 SKILL.md files' },
+      { label:'~/.config/opencode/skills', bytes:14590, note:'2 SKILL.md files' }
+    ]
+  },
+
+  configs: [
+    { id:'opencode', name:'opencode.json', path:'%USERPROFILE%\\.config\\opencode\\opencode.json', bytes:139,
+      lang:'json', note:'Global OpenCode config. Declares one plugin. No agent, model, mcp or permission keys — everything else is built-in default.',
+      body:'{\n  "$schema": "https://opencode.ai/config.json",\n  "plugins": [\n    "superpowers@git+https://github.com/obra/superpowers.git"\n  ]\n}' },
+    { id:'cli', name:'cli.json', path:'%USERPROFILE%\\.config\\opencode\\cli.json', bytes:251,
+      lang:'json', note:'TUI appearance only. Animations already disabled at the CLI level.',
+      body:'{\n  "$schema": "https://opencode.ai/v2/cli.json",\n  "theme": {\n    "name": "opencode",\n    "mode": "system"\n  },\n  "animations": false,\n  "session": {\n    "sidebar": "auto",\n    "scrollbar": false\n  },\n  "attention": {\n    "notifications": true\n  }\n}' },
+    { id:'agents', name:'AGENTS.md', path:'%USERPROFILE%\\.config\\opencode\\AGENTS.md', bytes:1021,
+      lang:'md', note:'The skill router. Loaded into every session, so it is the single largest always-resident item here.',
+      body:'# Skill router\nFor feature or UI building (NOT bug fixes, refactors, small edits), run once first:\nnode "$env:USERPROFILE\\.config\\opencode\\scripts\\skillctl.mjs" route "<one-line task summary>"\n(called `skillctl` below)\n\nAct only on its output:\n- COVERED: load only the listed skill(s).\n- MISSING: show me the candidate (name, source, one-line description) and ask before installing. Install with `skillctl install <name> --source <id>`. Never install globally.\n- NOTE (mcp/package): tell me; never install MCPs or packages without asking.\n- no-capability-match: proceed normally.\n\nRules:\n- Max one route per task. Never list or read the whole skills directory.\n- After using a project-local skill: `skillctl log <name> "<what it was used for>"`.\n- Durable project decisions only: `skillctl note "<decision>"`.\n- At session start, if .opencode/project-memory.md exists, read it (max 40 lines) before exploring the project.\n- A skill installed mid-session may not be in the skill list yet: read its SKILL.md path directly.' },
+    { id:'caps', name:'capabilities.json', path:'%USERPROFILE%\\.config\\opencode\\capabilities.json', bytes:1811,
+      lang:'json', note:'Keyword → skill routing table. Long keyword arrays abbreviated below; the file on disk is authoritative.',
+      body:'{\n  "capabilities": {\n    "motion": {\n      "type": "skill",\n      "keywords": ["animation","animate","motion","scroll","transition","micro-interaction","parallax","gsap","framer"],\n      "covered_by": ["impeccable","ui-ux-pro-max"]\n    },\n    "frontend-ui": {\n      "type": "skill",\n      "keywords": [ "…46 keywords: landing page, ui, ux, layout, responsive, design system, tailwind, css, component, frontend, dashboard, auth screen, settings page, form design, hero section…" ],\n      "covered_by": ["impeccable","ui-ux-pro-max"]\n    },\n    "browser-testing": {\n      "type": "skill",\n      "keywords": ["e2e","browser test","playwright","screenshot","visual test","browser","playwright-cli"],\n      "covered_by": ["playwright-cli"]\n    }\n  }\n}' },
+    { id:'sources', name:'skill-sources.json', path:'%USERPROFILE%\\.config\\opencode\\skill-sources.json', bytes:2093,
+      lang:'json', note:'approvedOnly:true — the router refuses any source not listed here. All 7 entries are git sources.',
+      body:'{\n  "approvedOnly": true,\n  "sources": [\n    { "id":"obra/superpowers",        "type":"git", "url":"https://github.com/obra/superpowers.git",                  "skillsPath":"skills" },\n    { "id":"pbakaus/impeccable",      "type":"git", "url":"https://github.com/pbakaus/impeccable.git",              "skillsPath":".opencode/skills" },\n    { "id":"vercel-labs/skills",      "type":"git", "url":"https://github.com/vercel-labs/skills.git",              "skillsPath":"skills" },\n    { "id":"mattpocock/skills",       "type":"git", "url":"https://github.com/mattpocock/skills.git",               "skillsPath":"skills" },\n    { "id":"hardikpandya/stop-slop",  "type":"git", "url":"https://github.com/hardikpandya/stop-slop.git",           "skillsPath":"." },\n    { "id":"nextlevelbuilder/ui-ux-pro-max-skill", "type":"git", "url":"https://github.com/nextlevelbuilder/ui-ux-pro-max-skill.git", "skillsPath":".claude/skills" },\n    { "id":"playwright-cli",          "type":"git", "url":"https://github.com/microsoft/playwright-cli.git",         "skillsPath":"skills" }\n  ]\n}' },
+    { id:'service', name:'service.json', path:'%USERPROFILE%\\.config\\opencode\\service.json', bytes:64,
+      lang:'json', note:'SECRET REDACTED. Shape shown only; the password value never enters this file.',
+      body:'{\n  "password": "<REDACTED — 43-char high-entropy local service secret>"\n}' },
+    { id:'lock', name:'skills-lock.json', path:'%USERPROFILE%\\skills-lock.json', bytes:null,
+      lang:'json', note:'Hash-pinned installs under ~/..agents/skills. Abbreviated; 6 skills are locked.',
+      body:'{\n  "version": 1,\n  "skills": {\n    "find-skills":  { "source":"vercel-labs/skills",     "sourceType":"github", "skillPath":"skills/find-skills/SKILL.md",            "computedHash":"b146008599c31…" },\n    "grill-me":     { "source":"mattpocock/skills",      "sourceType":"github", "skillPath":"skills/productivity/grill-me/SKILL.md", "computedHash":"5e0c683385ea…" },\n    "stop-slop":    { "source":"hardikpandya/stop-slop", "sourceType":"github", "skillPath":"SKILL.md",                             "computedHash":"09acd38f01d6…" }\n    // …3 further entries: grilling, ui-ux-pro-max, using-superpowers\n  }\n}' },
+    { id:'project', name:'Project config', path:'%USERPROFILE%\\projects\\example-project', bytes:0,
+      lang:'md', note:'Nothing exists here — verified by directory listing and hidden-file glob.',
+      body:'(no project-local configuration)\n\nChecked and absent:\n  .opencode/            .opencode/opencode.json(c)\n  .opencode/AGENTS.md   AGENTS.md\n  CLAUDE.md             GEMINI.md\n  .opencode/skill(s)/   .opencode/agent/\n  .opencode/plugin/     .opencode/command/\n  package.json          node_modules/\n\nDirectory entry count: 0' },
+    { id:'commands', name:'commands/impeccable.md', path:'%USERPROFILE%\\.config\\opencode\\commands\\impeccable.md', bytes:1048,
+      lang:'md', note:'Registers impeccable as a slash command bound to the build agent.',
+      body:'---\ndescription: Use when the user wants to design, redesign, shape, critique, audit,\n  polish … (full text is the impeccable SKILL.md description)\nagent: build\nsubtask: true\n---\nCall skill({ name: "impeccable" }) and follow its `Setup` and `Commands`\nsections to handle $ARGUMENTS.' }
+  ]
+};
+
+/* ============================ derived helpers ============================ */
+const esc = s => String(s ?? '')
+  .replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const tok = n => n >= 1000 ? (n/1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/,'') + 'k' : String(n);
+const kb = b => b >= 1048576 ? (b/1048576).toFixed(1)+' MB' : b >= 1024 ? (b/1024).toFixed(1)+' KB' : b + ' B';
+
+const SCOPE = {
+  builtin:{ label:'Built-in',      cls:'st-avail',    st:'built-in' },
+  plugin: { label:'Plugin',        cls:'st-plugin',   st:'plugin' },
+  local:  { label:'Local',         cls:'st-local',    st:'local' },
+  project:{ label:'Project-local', cls:'st-local',    st:'project-local' }
+};
+const STATUS = {
+  active:   { label:'active',   cls:'st-active' },
+  inactive: { label:'inactive', cls:'st-inactive' },
+  warn:     { label:'warning',  cls:'st-warn' },
+  bad:      { label:'broken',   cls:'st-bad' }
+};
+
+/* Flattened entity list powers search, filters and the graph. */
+const ENTITIES = [];
+const push = e => ENTITIES.push(e);
+SNAPSHOT.agents.forEach(a => push({
+  kind:'agent', id:a.id, title:a.name, sub:a.mode + (a.visible ? '' : ' · hidden'),
+  status: a.visible ? 'active' : 'inactive', category:'agents',
+  hay:[a.id,a.name,a.role,a.mode,a.source,a.deny.join(' '),a.ask.join(' '),(a.tools||[]).join(' ')].join(' '),
+  data:a
+}));
+SNAPSHOT.skills.forEach(s => push({
+  kind:'skill', id:s.name, title:s.name, sub:SCOPE[s.scope].label + ' · ' + kb(s.chars),
+  status: s.status, statusLabel: s.autoinvoke ? 'auto-invokable' : 'user-invoke only',
+  category:'skills', scope:s.scope,
+  hay:[s.name,s.desc,s.path,s.source||'',s.note||''].join(' '),
+  data:s
+}));
+SNAPSHOT.plugins.forEach(p => push({
+  kind:'plugin', id:p.name, title:p.name, sub:'v' + p.version,
+  status:p.status, category:'plugins',
+  hay:[p.name,p.version,p.commit,p.source,p.note,p.provides.join(' ')].join(' '),
+  data:p
+}));
+SNAPSHOT.providers.forEach(p => push({
+  kind:'provider', id:p.id, title:p.name, sub:p.models + ' models',
+  status:p.status, category:'providers',
+  hay:[p.id,p.name,p.modelList.join(' ')].join(' '),
+  data:p
+}));
+SNAPSHOT.overview.forEach(o => push({
+  kind:'metric', id:o.key, title:o.label, sub:o.note,
+  status:o.status, category:o.to,
+  hay:[o.label,o.note,o.key].join(' '),
+  data:o
+}));
+SNAPSHOT.commands.forEach(c => push({
+  kind:'command', id:c.name, title:c.name, sub:'/' + c.name + ' → ' + c.agent,
+  status:c.status, category:'commands',
+  hay:[c.name,c.file,c.agent,c.body].join(' '),
+  data:c
+}));
+SNAPSHOT.automation.forEach(a => push({
+  kind:'automation', id:a.name, title:a.name, sub:a.kind,
+  status:a.status, category:'automation',
+  hay:[a.name,a.kind,a.path,a.desc].join(' '),
+  data:a
+}));
+SNAPSHOT.warnings.forEach((w,i) => push({
+  kind:'warning', id:'warn-'+i, title:w.title, sub:w.level,
+  status: w.level === 'warn' ? 'warn' : 'inactive', category:'warnings',
+  hay:[w.title,w.detail,w.source].join(' '),
+  data:w
+}));
+SNAPSHOT.configs.forEach(c => push({
+  kind:'config', id:c.id, title:c.name, sub:kb(c.bytes || 0),
+  status:'active', category:'configs',
+  hay:[c.name,c.path,c.note,c.body].join(' '),
+  data:c
+}));
+/* models and context-cost rows are real drill-downs, so they are entities too */
+SNAPSHOT.providers.forEach(p => p.modelList.forEach(m => push({
+  kind:'model', id:m, title:m.split('/')[1], sub:p.name,
+  status: p.recent.includes(m) ? 'active' : 'inactive',
+  statusLabel: p.recent.includes(m) ? 'recently used' : 'available',
+  category:'providers',
+  hay:[m, p.name].join(' '),
+  data:{ provider:p, model:m }
+})));
+[...SNAPSHOT.context.alwaysResident, ...SNAPSHOT.context.onDemand, ...SNAPSHOT.context.none].forEach(c => push({
+  kind:'ctx', id:c.label, title:c.label, sub:kb(c.bytes),
+  status: c.kind === 'always' ? 'active' : c.kind === 'ondemand' ? 'avail' : 'inactive',
+  statusLabel: c.kind === 'always' ? 'always resident' : c.kind === 'ondemand' ? 'on demand' : 'not present',
+  category:'context',
+  hay:[c.label, c.detail].join(' '),
+  data:c
+}));
+
+/* ============================== state ============================== */
+const S = { q:'', filters:new Set(), view:'grid', open:false, lastFocus:null };
+const CATS = [
+  {k:'agents',     label:'Agents',    icon:'bot'},
+  {k:'skills',     label:'Skills',    icon:'sparkles'},
+  {k:'mcps',       label:'MCP',       icon:'plug'},
+  {k:'plugins',    label:'Plugins',   icon:'package'},
+  {k:'providers',  label:'Providers', icon:'cloud'},
+  {k:'commands',   label:'Commands',  icon:'terminal-square'},
+  {k:'automation', label:'Automation',icon:'route'},
+  {k:'configs',    label:'Config',    icon:'file-code'},
+  {k:'context',    label:'Context',   icon:'gauge'},
+  {k:'warnings',   label:'Warnings',  icon:'triangle-alert'},
+  {k:'project',    label:'Project',   icon:'folder'}
+];
+const SCOPES = [{k:'builtin',label:'Built-in'},{k:'plugin',label:'Plugin'},{k:'local',label:'Local'},{k:'project',label:'Project-local'}];
+
+const matches = e => {
+  if (S.filters.size && !S.filters.has(e.category) && !S.filters.has(e.scope)) return false;
+  if (!S.q) return true;
+  const t = S.q.toLowerCase();
+  return (e.title + ' ' + e.sub + ' ' + e.hay).toLowerCase().includes(t);
+};
+
+const chip = (label, cls, dot=true) =>
+  `<span class="chip ${cls}">${dot?'<span class="dot"></span>':''}${esc(label)}</span>`;
+
+function statusChip(e){
+  const m = STATUS[e.status] || STATUS.active;
+  const label = e.statusLabel || m.label;
+  const cls = e.statusLabel === 'user-invoke only' ? 'st-inactive' : m.cls;
+  return `<span class="chip ${cls}"><span class="dot"></span>${esc(label)}</span>`;
+}
+
+/* ============================== sections ============================== */
+function secHead(title, sub, id){
+  return `<div class="mb-4 flex flex-wrap items-end justify-between gap-3">
+    <div><h2 id="${id}" class="sec-title">${esc(title)}</h2><p class="sub mt-1">${sub}</p></div>
+  </div>`;
+}
+
+function renderOverview(){
+  const rows = SNAPSHOT.overview.filter(o => matches(ENTITIES.find(e=>e.kind==='metric' && e.id===o.key)));
+  if (!rows.length) return '';
+  const totalCtx = SNAPSHOT.context.alwaysResident.reduce((a,c)=>a+c.tokens,0);
+  return `<section aria-labelledby="h-over">
+    ${secHead('Overview', 'Counts read live from OpenCode. Every card opens the matching section.', 'h-over')}
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+      ${rows.map((o,i) => {
+        const zero = o.value === 0;
+        return `<button class="card glass rise ${['d1','d2','d3','d4'][i%4]} p-3.5" data-open="metric" data-id="${esc(o.key)}" style="animation-delay:${i*38}ms">
+          <span class="${zero?'text-slate-500':'text-cyan-300'}"><i data-lucide="${o.icon}" class="h-4 w-4" aria-hidden="true"></i></span>
+          <span class="mt-2.5 block tnum text-[26px] font-semibold leading-none tracking-tight ${zero?'text-slate-500':''}">${o.value}</span>
+          <span class="mt-1 block text-[13px] font-medium leading-tight">${esc(o.label)}</span>
+          <span class="mt-1 block text-[11px] leading-snug text-slate-400">${esc(o.note)}</span>
+          <span class="mt-2 block">${chip(zero ? 'empty' : 'live', zero ? 'st-inactive' : 'st-active')}</span>
+        </button>`;
+      }).join('')}
+    </div>
+    <p class="mt-3 inline-flex items-center gap-1.5 text-[12px] text-slate-400">
+      <i data-lucide="gauge" class="h-3.5 w-3.5 text-cyan-400" aria-hidden="true"></i>
+      Always-resident context from these resources: <span class="mono tnum text-slate-200">~${tok(totalCtx)} tokens</span> (AGENTS.md + skill metadata, chars/4 estimate)
+    </p>
+  </section>`;
+}
+
+function agentCard(a){
+  const hidden = !a.visible;
+  return `<button class="card glass p-4" data-open="agent" data-id="${esc(a.id)}" aria-label="Agent ${esc(a.name)}">
+    <div class="flex items-start justify-between gap-2">
+      <div class="flex min-w-0 items-center gap-2.5">
+        <span class="grid h-8 w-8 flex-none place-items-center rounded-lg border ${hidden?'border-white/10 bg-white/[.03]':'border-cyan-400/28 bg-cyan-400/[.09]'}">
+          <i data-lucide="${hidden?'eye-off':'bot'}" class="h-4 w-4 ${hidden?'text-slate-500':'text-cyan-300'}" aria-hidden="true"></i>
+        </span>
+        <div class="min-w-0">
+          <p class="truncate text-[15px] font-semibold tracking-tight">${esc(a.name)}</p>
+          <p class="lbl truncate">${esc(a.id)}</p>
+        </div>
+      </div>
+      ${chip(a.mode, a.mode === 'primary' ? 'st-avail' : 'st-local')}
+    </div>
+    <p class="mt-2.5 text-[12.5px] leading-snug text-slate-300">${esc(a.role.length > 128 ? a.role.slice(0,128) + '…' : a.role)}</p>
+    <div class="mt-3 flex flex-wrap gap-1.5">
+      ${chip(a.builtIn ? 'built-in' : 'custom', a.builtIn ? 'st-inactive' : 'st-plugin')}
+      ${hidden ? chip('hidden','st-inactive') : ''}
+      ${a.deny.length ? chip(a.deny.length + ' denied', a.deny.includes('*:*') ? 'st-bad' : 'st-warn') : ''}
+    </div>
+  </button>`;
+}
+function renderAgents(){
+  const list = SNAPSHOT.agents.filter(a => matches(ENTITIES.find(e=>e.kind==='agent'&&e.id===a.id)));
+  if (!list.length) return '';
+  const shown = list.filter(a=>a.visible), hidden = list.filter(a=>!a.visible);
+  return `<section aria-labelledby="h-agents">
+    ${secHead('Agent Fleet', `${list.length} agents from <span class="mono">/api/agent</span>. No custom agent files exist on disk, so every agent is OpenCode built-in. <span class="text-slate-400">${shown.length} selectable · ${hidden.length} hidden internal.</span>`, 'h-agents')}
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      ${shown.map(agentCard).join('')}
+    </div>
+    ${hidden.length ? `<details class="glass mt-3 overflow-hidden">
+      <summary class="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-[13px] text-slate-300 hover:bg-white/[.03]">
+        <i data-lucide="chevron-right" class="h-4 w-4 flex-none text-slate-500 transition-transform duration-200 open:rotate-90" aria-hidden="true"></i>
+        <span>${hidden.length} hidden internal agent${hidden.length>1?'s':''}</span>
+        <span class="ml-auto text-[11px] text-slate-500">compaction · title · summary</span>
+      </summary>
+      <div class="grid gap-3 border-t border-white/10 p-3 sm:grid-cols-2 lg:grid-cols-3">${hidden.map(agentCard).join('')}</div>
+    </details>` : ''}
+  </section>`;
+}
+
+function renderMcps(){
+  if (SNAPSHOT.mcps.length) return '';
+  const vis = matches({kind:'metric',id:'mcps',title:'MCP servers',sub:'',status:'inactive',category:'mcps',scope:null,hay:'mcp servers'});
+  if (!vis) return '';
+  return `<section aria-labelledby="h-mcp">
+    ${secHead('MCP Servers', 'No MCP server is configured. This is an empty state, not a rendering failure.', 'h-mcp')}
+    <div class="glass empty-dash p-7">
+      <div class="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+        <span class="grid h-11 w-11 flex-none place-items-center rounded-xl border border-white/12 bg-white/[.03]">
+          <i data-lucide="plug-zap" class="h-5 w-5 text-slate-500" aria-hidden="true"></i>
+        </span>
+        <div class="min-w-0 flex-1">
+          <p class="text-base font-semibold tracking-tight">Zero MCP servers</p>
+          <p class="sub mt-1">No tool schemas are injected into any session, and MCP contributes <span class="mono text-slate-200">0 tokens</span> to context.</p>
+          <div class="mt-3 flex flex-wrap gap-1.5">
+            ${chip('opencode mcp list → none','st-inactive',false)}
+            ${chip('no mcp key in opencode.json','st-inactive',false)}
+            ${chip('historically had 1 · removed','st-warn',false)}
+          </div>
+        </div>
+      </div>
+      <p class="mt-4 border-t border-white/10 pt-3 text-[12px] leading-relaxed text-slate-400">${esc(SNAPSHOT.mcpEvidence)}</p>
+    </div>
+  </section>`;
+}
+
+function skillCard(s){
+  const sc = SCOPE[s.scope];
+  return `<button class="card glass p-3.5" data-open="skill" data-id="${esc(s.name)}" aria-label="Skill ${esc(s.name)}">
+    <div class="flex items-start justify-between gap-2">
+      <p class="min-w-0 truncate text-[14px] font-semibold tracking-tight">${esc(s.name)}</p>
+      <span class="${s.scope==='plugin'?'text-amber-300':s.scope==='builtin'?'text-cyan-300':s.scope==='project'?'text-violet-300':'text-violet-300'}">
+        <i data-lucide="${s.scope==='plugin'?'package':s.scope==='builtin'?'book-open':'folder'}" class="h-3.5 w-3.5 flex-none" aria-hidden="true"></i>
+      </span>
+    </div>
+    <p class="mt-1.5 line-clamp-3 text-[12px] leading-snug text-slate-400">${esc(s.desc)}</p>
+    <div class="mt-2.5 flex flex-wrap gap-1.5">
+      <span class="chip ${sc.cls}"><span class="dot"></span>${sc.label}</span>
+      ${chip(kb(s.chars),'st-inactive',false)}
+      ${s.autoinvoke ? '' : chip('no autoinvoke','st-warn',false)}
+    </div>
+  </button>`;
+}
+function renderSkills(){
+  const list = SNAPSHOT.skills.filter(s => matches(ENTITIES.find(e=>e.kind==='skill'&&e.id===s.name)));
+  if (!list.length) return '';
+  const by = k => list.filter(s=>s.scope===k);
+  return `<section aria-labelledby="h-skills">
+    ${secHead('Skills & Automation',
+      `${list.length} of 24 skills returned by <span class="mono">/api/skill</span>. Duplicate physical copies are counted once — OpenCode resolves one path per capability.`, 'h-skills')}
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      ${list.map(skillCard).join('')}
+    </div>
+    <div class="mt-4 grid gap-3 lg:grid-cols-2">
+      ${renderCommands()}
+      ${renderAutomation()}
+    </div>
+  </section>`;
+}
+function renderCommands(){
+  const list = SNAPSHOT.commands.filter(c => matches(ENTITIES.find(e=>e.kind==='command'&&e.id===c.name)));
+  if (!list.length) return '';
+  return `<div class="glass overflow-hidden">
+    <div class="flex items-center gap-2 border-b border-white/10 px-4 py-2.5">
+      <i data-lucide="terminal-square" class="h-4 w-4 text-cyan-300" aria-hidden="true"></i>
+      <h3 class="text-[13px] font-semibold tracking-tight">Slash commands</h3>
+      <span class="ml-auto lbl">${list.length}</span>
+    </div>
+    <div class="divide-y divide-white/[.06]">
+      ${list.map(c=>`<button class="row flex w-full items-center gap-3 px-4 py-2.5 text-left" data-open="command" data-id="${esc(c.name)}">
+        <span class="mono text-[13px] text-cyan-200">/${esc(c.name)}</span>
+        <span class="ml-auto text-[11px] text-slate-400">agent: ${esc(c.agent)}</span>
+        <i data-lucide="chevron-right" class="h-3.5 w-3.5 flex-none text-slate-600" aria-hidden="true"></i>
+      </button>`).join('')}
+    </div>
+  </div>`;
+}
+function renderAutomation(){
+  const list = SNAPSHOT.automation.filter(a => matches(ENTITIES.find(e=>e.kind==='automation'&&e.id===a.name)));
+  if (!list.length) return '';
+  return `<div class="glass overflow-hidden">
+    <div class="flex items-center gap-2 border-b border-white/10 px-4 py-2.5">
+      <i data-lucide="route" class="h-4 w-4 text-cyan-300" aria-hidden="true"></i>
+      <h3 class="text-[13px] font-semibold tracking-tight">Router &amp; automation</h3>
+      <span class="ml-auto lbl">${list.length}</span>
+    </div>
+    <div class="divide-y divide-white/[.06]">
+      ${list.map(a=>`<button class="row flex w-full items-start gap-3 px-4 py-2.5 text-left" data-open="automation" data-id="${esc(a.name)}">
+        <span class="mt-0.5 ${a.status==='active'?'text-emerald-400':'text-slate-500'}"><i data-lucide="${a.status==='active'?'check-circle-2':'circle-dashed'}" class="h-4 w-4 flex-none" aria-hidden="true"></i></span>
+        <span class="min-w-0 flex-1">
+          <span class="block truncate text-[13px] font-medium">${esc(a.name)}</span>
+          <span class="block truncate text-[11px] text-slate-400">${esc(a.kind)}${a.bytes?(' · '+kb(a.bytes)):''}</span>
+        </span>
+        <i data-lucide="chevron-right" class="mt-0.5 h-3.5 w-3.5 flex-none text-slate-600" aria-hidden="true"></i>
+      </button>`).join('')}
+    </div>
+  </div>`;
+}
+
+function renderPlugins(){
+  const list = SNAPSHOT.plugins.filter(p => matches(ENTITIES.find(e=>e.kind==='plugin'&&e.id===p.name)));
+  if (!list.length) return '';
+  return `<section aria-labelledby="h-plug">
+    ${secHead('Plugins', `${list.length} installed, from <span class="mono">opencode plugin list</span> and the declared <span class="mono">plugins[]</span> entry.`, 'h-plug')}
+    <div class="grid gap-3 lg:grid-cols-2">
+      ${list.map(p=>`<button class="card glass min-w-0 p-4 text-left" data-open="plugin" data-id="${esc(p.name)}" aria-label="Plugin ${esc(p.name)}">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex min-w-0 items-center gap-2.5">
+            <span class="grid h-8 w-8 flex-none place-items-center rounded-lg border border-amber-400/28 bg-amber-400/[.09]">
+              <i data-lucide="package" class="h-4 w-4 text-amber-300" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="truncate text-[15px] font-semibold tracking-tight">${esc(p.name)}</p>
+              <p class="lbl truncate">v${esc(p.version)} · ${esc(p.commit)}</p>
+            </div>
+          </div>
+          ${statusChip({status:p.status})}
+        </div>
+        <p class="mono mt-2.5 truncate text-[11.5px] text-slate-400">${esc(p.source)}</p>
+        <div class="mt-3 flex flex-wrap gap-1.5">
+          ${chip(p.skillCount + ' skills','st-plugin')}
+          ${chip('loaded','st-active')}
+          ${chip('git source','st-inactive',false)}
+        </div>
+      </button>`).join('')}
+    </div>
+  </section>`;
+}
+
+function renderProviders(){
+  const list = SNAPSHOT.providers.filter(p => matches(ENTITIES.find(e=>e.kind==='provider'&&e.id===p.id)));
+  if (!list.length) return '';
+  return `<section aria-labelledby="h-prov">
+    ${secHead('Providers & Models', 'One provider is reachable. The model list is exactly what the CLI returned.', 'h-prov')}
+    <div class="grid gap-3 lg:grid-cols-2">
+      ${list.map(p=>`<div class="glass overflow-hidden">
+        <div class="flex flex-wrap items-center gap-3 border-b border-white/10 px-4 py-3">
+          <span class="grid h-9 w-9 flex-none place-items-center rounded-lg border border-cyan-400/28 bg-cyan-400/[.09]">
+            <i data-lucide="cloud" class="h-4 w-4 text-cyan-300" aria-hidden="true"></i>
+          </span>
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-[15px] font-semibold tracking-tight">${esc(p.name)}</p>
+            <p class="mono truncate text-[11px] text-slate-400">${esc(p.id)}</p>
+          </div>
+          <span class="tnum text-[22px] font-semibold leading-none">${p.models}</span>
+        </div>
+        <div class="p-3">
+          <div class="grid gap-1.5 sm:grid-cols-2">
+            ${p.modelList.map(m=>{
+              const recent = p.recent.includes(m);
+              return `<button class="row flex items-center gap-2 rounded-md border ${recent?'border-cyan-400/35 bg-cyan-400/[.07]':'border-white/[.07]'} px-2.5 py-1.5 text-left" data-open="model" data-id="${esc(m)}">
+                <i data-lucide="cpu" class="h-3.5 w-3.5 flex-none ${recent?'text-cyan-300':'text-slate-500'}" aria-hidden="true"></i>
+                <span class="mono truncate text-[11.5px] ${recent?'text-cyan-100':'text-slate-300'}">${esc(m.split('/')[1])}</span>
+                ${recent?chip('recent','st-avail'):''}
+              </button>`;
+            }).join('')}
+          </div>
+          <p class="mt-3 text-[11.5px] leading-snug text-slate-400">${esc(p.note)}</p>
+        </div>
+      </div>`).join('')}
+    </div>
+  </section>`;
+}
+
+function renderConfig(){
+  const list = SNAPSHOT.configs.filter(c => matches(ENTITIES.find(e=>e.kind==='config'&&e.id===c.id)));
+  if (!list.length) return '';
+  return `<section aria-labelledby="h-cfg">
+    ${secHead('Config Inspector', 'Sanitized snapshots of the real config files on disk. The one secret in this setup is redacted.', 'h-cfg')}
+    <div class="glass overflow-hidden">
+      <div class="scroll-x flex w-full min-w-0 gap-1 overflow-x-auto border-b border-white/10 px-2 pt-2" role="tablist" aria-label="Configuration files">
+        ${list.map((c,i)=>`<button class="tab px-3.5 py-2.5 text-[13px] font-medium" role="tab" id="tab-${esc(c.id)}"
+          aria-selected="${i===0}" aria-controls="panel-${esc(c.id)}" data-tab="${esc(c.id)}">${esc(c.name)}</button>`).join('')}
+      </div>
+      ${list.map((c,i)=>`<div role="tabpanel" id="panel-${esc(c.id)}" aria-labelledby="tab-${esc(c.id)}" ${i===0?'':'hidden'}>
+        <div class="flex flex-wrap items-center gap-2 border-b border-white/[.06] px-4 py-2.5">
+          <i data-lucide="file-code" class="h-3.5 w-3.5 flex-none text-slate-500" aria-hidden="true"></i>
+          <code class="mono min-w-0 flex-1 truncate text-[11.5px] text-slate-400">${esc(c.path)}</code>
+          <span class="chip st-inactive" style="font-family:var(--mono)">${kb(c.bytes || 0)}</span>
+          <button class="btn !min-h-[30px] !py-1 !text-[12px]" data-copy="cfg-${esc(c.id)}" aria-label="Copy ${esc(c.name)} contents">
+            <i data-lucide="copy" class="h-3.5 w-3.5" aria-hidden="true"></i>Copy
+          </button>
+        </div>
+        <div class="p-4">
+          <p class="sub mb-3 text-[12.5px]">${esc(c.note)}</p>
+          <pre class="tape mono overflow-x-auto rounded-lg border border-white/[.07] bg-black/35 p-3.5 text-[11.5px] leading-[1.65] text-slate-300"><code id="cfg-${esc(c.id)}" class="prose-x">${esc(c.body)}</code></pre>
+        </div>
+      </div>`).join('')}
+    </div>
+  </section>`;
+}
+
+function renderContext(){
+  const A = SNAPSHOT.context;
+  const total = A.alwaysResident.reduce((a,c)=>a+c.tokens,0);
+  const od = A.onDemand.reduce((a,c)=>a+c.tokens,0);
+  const vis = matches({kind:'metric',id:'context',title:'Context overhead',sub:'',status:'active',category:'context',scope:null,hay:'context tokens'});
+  if (!vis) return '';
+  const row = (c, i) => {
+    const max = Math.max(total, od);
+    return `<button class="row w-full rounded-lg border border-white/[.07] px-3 py-2.5 text-left" data-open="ctx" data-id="${esc(c.label)}">
+      <div class="flex items-baseline justify-between gap-3">
+        <span class="min-w-0 truncate text-[13px] font-medium">${esc(c.label)}</span>
+        <span class="tnum flex-none font-mono text-[12px] ${c.tokens===0?'text-slate-500':'text-cyan-200'}">${c.tokens===0?'0':('~'+tok(c.tokens))} tok</span>
+      </div>
+      <div class="bar mt-2 ${c.kind==='ondemand'?'am':''}"><i style="width:${Math.max(c.tokens?2:0,Math.round(c.tokens/max*100))}%"></i></div>
+      <p class="mt-1.5 text-[11px] text-slate-400">${esc(c.detail)}</p>
+    </button>`;
+  };
+  return `<section aria-labelledby="h-ctx">
+    ${secHead('Context Overhead',
+      `Always-resident cost is <span class="mono text-cyan-200">~${tok(total)} tokens</span> (chars/4). On-demand bodies add <span class="mono text-amber-200">~${tok(od)}</span> only when a skill is actually loaded.`, 'h-ctx')}
+    <div class="grid gap-3 lg:grid-cols-3">
+      <div class="glass p-4 lg:col-span-2">
+        <div class="mb-3 flex items-center gap-2">
+          <i data-lucide="layers" class="h-4 w-4 text-cyan-300" aria-hidden="true"></i>
+          <h3 class="text-[13px] font-semibold tracking-tight">Resident in every session</h3>
+        </div>
+        <div class="space-y-2">${A.alwaysResident.map(row).join('')}</div>
+        <div class="my-4 border-t border-white/10"></div>
+        <div class="mb-3 flex items-center gap-2">
+          <i data-lucide="download" class="h-4 w-4 text-amber-300" aria-hidden="true"></i>
+          <h3 class="text-[13px] font-semibold tracking-tight">Loaded on demand</h3>
+        </div>
+        <div class="space-y-2">${A.onDemand.map(row).join('')}</div>
+        <div class="my-4 border-t border-white/10"></div>
+        <div class="mb-3 flex items-center gap-2">
+          <i data-lucide="ban" class="h-4 w-4 text-slate-500" aria-hidden="true"></i>
+          <h3 class="text-[13px] font-semibold tracking-tight">Not present — zero cost</h3>
+        </div>
+        <div class="space-y-2">${A.none.map(row).join('')}</div>
+      </div>
+      <div class="space-y-3">
+        <div class="glass p-4">
+          <p class="lbl">Always resident</p>
+          <p class="tnum mt-1.5 text-[30px] font-semibold leading-none tracking-tight text-cyan-200">~${tok(total)}</p>
+          <p class="mt-1.5 text-[11.5px] leading-snug text-slate-400">Approximate tokens before the first user message. MCP costs nothing because no MCP is configured.</p>
+        </div>
+        <div class="glass p-4">
+          <p class="lbl">On-demand ceiling</p>
+          <p class="tnum mt-1.5 text-[30px] font-semibold leading-none tracking-tight text-amber-200">~${tok(od)}</p>
+          <p class="mt-1.5 text-[11.5px] leading-snug text-slate-400">Upper bound if every skill body were loaded at once. Real sessions load a small subset.</p>
+        </div>
+        <div class="glass p-4">
+          <p class="lbl">Disk footprint</p>
+          <ul class="mt-2 space-y-1.5">
+            ${A.cacheFootprint.map(c=>`<li class="flex items-baseline justify-between gap-2 text-[12px]">
+              <span class="min-w-0 truncate text-slate-300">${esc(c.label)}</span>
+              <span class="mono tnum flex-none text-slate-400">${kb(c.bytes)}</span></li>`).join('')}
+          </ul>
+        </div>
+      </div>
+    </div>
+    <p class="mt-3 text-[11.5px] text-slate-500">${esc(A.note)}</p>
+  </section>`;
+}
+
+function renderWarnings(){
+  const list = SNAPSHOT.warnings.filter(w => matches(ENTITIES.find(e=>e.kind==='warning'&&e.data===w)));
+  if (!list.length) return '';
+  return `<section aria-labelledby="h-warn">
+    ${secHead('Verified Findings', 'Each item was confirmed against a file or a command. Nothing here is speculative.', 'h-warn')}
+    <div class="grid gap-3 lg:grid-cols-2">
+      ${list.map((w,i)=>`<button class="card glass min-w-0 p-4 text-left" data-open="warning" data-id="warn-${i}" aria-label="${esc(w.title)}">
+        <div class="flex items-start gap-2.5">
+          <span class="grid h-7 w-7 flex-none place-items-center rounded-lg border ${w.level==='warn'?'border-amber-400/30 bg-amber-400/[.09]':'border-cyan-400/25 bg-cyan-400/[.07]'}">
+            <i data-lucide="${w.level==='warn'?'triangle-alert':'info'}" class="h-3.5 w-3.5 ${w.level==='warn'?'text-amber-300':'text-cyan-300'}" aria-hidden="true"></i>
+          </span>
+          <div class="min-w-0 flex-1">
+            <p class="text-[13.5px] font-semibold leading-snug tracking-tight">${esc(w.title)}</p>
+            <p class="mt-1.5 line-clamp-3 text-[12px] leading-snug text-slate-400">${esc(w.detail)}</p>
+            <p class="mono mt-2 truncate text-[11px] text-slate-500">${esc(w.source)}</p>
+          </div>
+        </div>
+      </button>`).join('')}
+    </div>
+  </section>`;
+}
+
+function renderProject(){
+  const p = SNAPSHOT.project;
+  const vis = matches({kind:'metric',id:'project',title:'Project-local',sub:'',status:'inactive',category:'project',scope:null,hay:'project local'});
+  if (!vis) return '';
+  return `<section aria-labelledby="h-proj">
+    ${secHead('Project Scope', 'This project contributes no OpenCode configuration of its own.', 'h-proj')}
+    <div class="glass empty-dash p-6">
+      <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+        <span class="grid h-10 w-10 flex-none place-items-center rounded-xl border border-violet-400/25 bg-violet-400/[.08]">
+          <i data-lucide="folder-open" class="h-5 w-5 text-violet-300" aria-hidden="true"></i>
+        </span>
+        <div class="min-w-0 flex-1">
+          <p class="text-[15px] font-semibold tracking-tight">0 project-local resources</p>
+          <p class="sub mt-1">${esc(p.note)}</p>
+        </div>
+        ${chip('empty','st-inactive')}
+      </div>
+      <div class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        ${[['Skills','localSkills'],['Agents','localAgents'],['Plugins','localPlugins'],['MCP servers','localMcps']].map(([l,k])=>`
+          <div class="glass-2 px-3 py-2.5">
+            <p class="lbl">${l}</p>
+            <p class="tnum mt-1 text-[19px] font-semibold leading-none text-slate-500">${p[k].length}</p>
+          </div>`).join('')}
+      </div>
+    </div>
+  </section>`;
+}
+
+/* ============================== graph ============================== */
+/* Nodes and edges below are derived from real config only:
+   opencode.json -> plugins[] -> superpowers -> its SKILL.md paths
+   capabilities.json covered_by -> skill names          /api/agent -> agents
+   /api/provider -> models            no MCP, no project edges (nothing to connect) */
+function renderGraph(){
+  const nodes = [], edges = [];
+  const root = { id:'opencode', label:'OpenCode', sub:'v'+SNAPSHOT.meta.opencodeVersion, k:'root', s:'active', x:0, y:0 };
+  nodes.push(root);
+  const cols = { agents:[], skills:[], plugins:[], providers:[] };
+  SNAPSHOT.agents.forEach(a => cols.agents.push({ id:'agent:'+a.id, label:a.name, sub:a.mode, k:'agent', s:a.visible?'active':'inactive' }));
+  SNAPSHOT.skills.forEach(s => cols.skills.push({ id:'skill:'+s.name, label:s.name, sub:SCOPE[s.scope].label.toLowerCase(), k:'skill', s:s.autoinvoke?'active':'inactive', sc:s.scope }));
+  SNAPSHOT.plugins.forEach(p => cols.plugins.push({ id:'plugin:'+p.name, label:p.name, sub:'v'+p.version, k:'plugin', s:'plugin' }));
+  SNAPSHOT.providers.forEach(p => cols.providers.push({ id:'provider:'+p.id, label:p.name, sub:p.models+' models', k:'provider', s:'active' }));
+
+  Object.entries(cols).forEach(([k,arr]) => { nodes.push(...arr); arr.forEach(n => edges.push({ from:'opencode', to:n.id, kind: k==='skills' ? 'provides' : 'has' })); });
+
+  /* plugin -> skill edges exist only where the plugin is the real resolution path */
+  SNAPSHOT.plugins.forEach(p => SNAPSHOT.skills.forEach(s => {
+    if (s.scope === 'plugin' && p.provides.includes(s.name)) edges.push({ from:'plugin:'+p.name, to:'skill:'+s.name, kind:'provides' });
+  }));
+  /* capability routing edges: capabilities.json covered_by -> real skill names */
+  /* capabilities.json declares covered_by: frontend-ui and motion -> these two */
+  ['impeccable','ui-ux-pro-max'].forEach(cap => {
+    if (SNAPSHOT.skills.some(s => s.name === cap)) edges.push({ from:'automation:router', to:'skill:'+cap, kind:'routes' });
+  });
+  const router = { id:'automation:router', label:'skillctl router', sub:'AGENTS.md', k:'automation', s:'active' };
+  nodes.push(router); edges.push({ from:'opencode', to:'automation:router', kind:'has' });
+
+  const NW = 176, NH = 38, ROW = 54, TOP = 52;
+  const COLS = [ {k:'root',x:40}, {k:'automation',x:280}, {k:'agent',x:520}, {k:'plugin',x:790}, {k:'skill',x:1050} ];
+  const byK = k => nodes.filter(n => n.k === k).sort((a,b)=>a.label.localeCompare(b.label));
+  let maxRows = 1;
+  COLS.forEach(c => { const a = byK(c.k); maxRows = Math.max(maxRows, a.length); a.forEach((n,i) => { n.x = c.x; n.y = TOP + i * ROW; }); });
+  byK('provider').forEach(n => { n.x = 790; n.y = TOP + maxRows * ROW + 24; });
+  const W = 1290, H = TOP + (maxRows + 3) * ROW;
+
+  const SC = { active:{f:'rgba(56,224,208,.85)',t:'#38e0d0'}, inactive:{f:'rgba(255,255,255,.16)',t:'#7c8798'},
+               plugin:{f:'rgba(240,169,43,.8)',t:'#f0a92b'}, local:{f:'rgba(139,124,246,.8)',t:'#8b7cf6'},
+               builtin:{f:'rgba(56,224,208,.6)',t:'#38e0d0'}, root:{f:'rgba(56,224,208,1)',t:'#38e0d0'} };
+  const nm = n => SC[n.sc === 'plugin' ? 'plugin' : n.sc === 'builtin' ? 'builtin' : n.s] || SC[n.s] || SC.active;
+
+  const edgeSvg = edges.map(e => {
+    const a = nodes.find(n=>n.id===e.from), b = nodes.find(n=>n.id===e.to);
+    if (!a || !b) return '';
+    const x1 = a.x + NW, y1 = a.y + NH/2, x2 = b.x, y2 = b.y + NH/2;
+    const mx = (x1 + x2) / 2;
+    return `<path class="gedge ${e.kind==='routes'?'dashed':''}" data-edge="${esc(e.from)}|${esc(e.to)}" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"/>`;
+  }).join('');
+
+  const hitSvg = edges.map(e => {
+    const a = nodes.find(n=>n.id===e.from), b = nodes.find(n=>n.id===e.to);
+    if (!a || !b) return '';
+    const x1 = a.x + NW, y1 = a.y + NH/2, x2 = b.x, y2 = b.y + NH/2, mx = (x1 + x2) / 2;
+    return `<path class="glink" data-edge="${esc(e.from)}|${esc(e.to)}" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"/>`;
+  }).join('');
+
+  const nodeSvg = nodes.map(n => {
+    const c = nm(n);
+    const label = n.label.length > 23 ? n.label.slice(0,22) + '…' : n.label;
+    return `<g class="gnode" data-open="${esc(n.k==='root'?'root':n.k==='skill'?'skill':n.k==='agent'?'agent':n.k==='plugin'?'plugin':n.k==='automation'?'automation':'provider')}"
+        data-id="${esc(n.id.includes(':') ? n.id.split(':')[1] : n.id)}" tabindex="0" role="button"
+        aria-label="${esc(n.label)}, ${esc(n.sub)}">
+      <rect class="gbox" x="${n.x}" y="${n.y}" width="${NW}" height="${NH}" rx="9"
+        stroke="${c.t}" stroke-opacity="${n.s==='active'?.55:.32}" fill-opacity="${n.k==='root'?.16:.94}"/>
+      <rect x="${n.x}" y="${n.y+8}" width="3" height="${NH-16}" rx="1.5" fill="${c.f}"/>
+      <text class="glabel" x="${n.x+14}" y="${n.y+15}">${esc(label)}</text>
+      <text class="gsub" x="${n.x+14}" y="${n.y+29}" fill="${c.t}" fill-opacity=".8">${esc(n.sub)}</text>
+    </g>`;
+  }).join('');
+
+  const legend = [['active','Configured / active','#38e0d0'],['inactive','Hidden / inactive','#7c8798'],['plugin','Plugin-provided','#f0a92b'],['local','Local skill','#8b7cf6'],['root','OpenCode runtime','#38e0d0']];
+
+  return `<section aria-labelledby="h-graph">
+    ${secHead('Relationship Graph',
+      'Only edges traceable to config or verified API output. No MCP node exists because no MCP is configured; no project node exists because the project dir is empty. Hover an edge to highlight it.', 'h-graph')}
+    <div class="glass overflow-hidden">
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-white/10 px-4 py-2.5">
+        ${legend.map(([k,l,c])=>`<span class="inline-flex items-center gap-1.5 text-[11px] text-slate-400"><span style="width:8px;height:8px;border-radius:2px;background:${c};display:inline-block"></span>${l}</span>`).join('')}
+        <span class="ml-auto lbl">${nodes.length} nodes · ${edges.length} edges</span>
+      </div>
+      <div class="scroll-x bg-black/15">
+        <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" class="block min-w-[1290px]" role="img" aria-label="Relationship graph of the OpenCode setup">
+          <g>${edgeSvg}</g><g>${hitSvg}</g><g>${nodeSvg}</g>
+        </svg>
+      </div>
+    </div>
+  </section>`;
+}
+
+/* ============================== render ============================== */
+function render(){
+  const el = document.getElementById('sections');
+  const parts = [renderOverview(), renderAgents(), renderMcps(), renderSkills(), renderPlugins(), renderProviders(), renderContext(), renderConfig(), renderWarnings(), renderProject()];
+  el.innerHTML = parts.filter(Boolean).join('');
+  document.getElementById('empty').hidden = ENTITIES.some(matches);
+  if (S.view === 'graph') el.insertAdjacentHTML('afterbegin', renderGraph());
+  icons();
+  buildFilters();
+}
+
+/* ============================== drawer ============================== */
+/* every value passes through esc() — including paths — so no caller can inject
+   markup by passing raw HTML as a value */
+function kv(rows){
+  return `<dl class="kv">${rows.filter(Boolean).map(r=>`<dt>${esc(r[0])}</dt><dd>${esc(r[1])}</dd>`).join('')}</dl>`;
+}
+const code = t => `<code class="mono break-all text-[11.5px] text-slate-300">${esc(t)}</code>`;
+const pathRow = p => p ? `<div class="glass-2 mt-3 flex items-start gap-2 p-2.5"><i data-lucide="folder" class="mt-0.5 h-3.5 w-3.5 flex-none text-slate-500" aria-hidden="true"></i>${code(p)}</div>` : '';
+const permList = (arr, cls) => arr && arr.length
+  ? `<ul class="mt-1.5 space-y-1">${arr.map(p=>`<li class="flex items-center gap-2"><span class="chip ${cls} !py-0"><span class="dot"></span>${esc(p)}</span></li>`).join('')}</ul>` : '';
+
+function detail(kind, id){
+  const E = ENTITIES.find(e => e.kind === kind && e.id === id);
+  if (!E) return null;
+  const D = E.data;
+  let body = '', chips = [];
+
+  if (kind === 'agent'){
+    chips = [chip(D.mode === 'primary' ? 'primary' : 'subagent', D.mode==='primary'?'st-avail':'st-local'),
+             chip(D.builtIn ? 'built-in' : 'custom', D.builtIn?'st-inactive':'st-plugin'),
+             ...(D.visible ? [] : [chip('hidden','st-inactive')])];
+    body = `<p class="sub text-[13px]">${esc(D.role)}</p>
+      <div class="mt-4">${kv([
+        ['id', D.id], ['mode', D.mode], ['visibility', D.visible ? 'selectable' : 'hidden internal'],
+        ['model', D.model], ['provider', D.provider],
+        ['tool set', D.tools ? D.tools.join(', ') : 'inherits all tools except those denied'],
+        ['permission rules', String(D.permCount)]
+      ])}</div>
+      <div class="mt-4 grid gap-3 sm:grid-cols-2">
+        <div><p class="lbl">denied</p>${permList(D.deny,'st-bad')}</div>
+        <div><p class="lbl">asks first</p>${permList(D.ask,'st-warn')}</div>
+      </div>
+      <p class="mt-4 text-[11.5px] leading-snug text-slate-500">All agents inherit the same allow-list: external access is pre-approved for ~/.local/share/opencode/shell, tool-output, %TEMP%\\opencode and ~/.config/opencode. Reading .env or .env.* always prompts; *.env.example is allowed.</p>
+      ${pathRow(D.source && D.source.startsWith('C:') ? D.source : null)}
+      ${D.source && !D.source.startsWith('C:') ? `<p class="mt-3 text-[11.5px] text-slate-400">${esc(D.source)}</p>` : ''}`;
+  }
+
+  else if (kind === 'skill'){
+    const sc = SCOPE[D.scope];
+    chips = [chip(sc.label, sc.cls), chip(D.autoinvoke ? 'auto-invokable' : 'user-invoke only', D.autoinvoke?'st-active':'st-warn'),
+             chip(kb(D.chars), 'st-inactive', false), chip('~'+tok(Math.round(D.chars/4))+' tok if loaded','st-inactive',false)];
+    body = `<p class="sub text-[13px]">${esc(D.desc)}</p>
+      <div class="mt-4">${kv([
+        ['name', D.name], ['scope', sc.label], ['path', D.path, true],
+        ['body size', D.chars.toLocaleString() + ' chars'],
+        ['description', D.descChars + ' chars'],
+        ['on load', '~' + tok(Math.round(D.chars/4)) + ' tokens (chars/4 estimate)'],
+        ['invocation', D.autoinvoke ? 'model may auto-invoke' : 'autoinvoke disabled'],
+        D.source ? ['source', D.source] : null,
+        D.version ? ['version', D.version] : null
+      ])}</div>
+      ${D.note ? `<div class="glass-2 mt-4 flex items-start gap-2 p-3"><i data-lucide="info" class="mt-0.5 h-4 w-4 flex-none text-amber-300" aria-hidden="true"></i><p class="text-[12px] leading-snug text-slate-300">${esc(D.note)}</p></div>` : ''}
+      ${D.autoinvoke ? '' : `<div class="glass-2 mt-3 flex items-start gap-2 p-3"><i data-lucide="ban" class="mt-0.5 h-4 w-4 flex-none text-amber-300" aria-hidden="true"></i><p class="text-[12px] leading-snug text-slate-300">This skill will not be selected automatically. It must be invoked explicitly.</p></div>`}`;
+  }
+
+  else if (kind === 'plugin'){
+    chips = [chip('loaded','st-active'), chip('git','st-inactive'), chip(D.skillCount+' skills','st-plugin')];
+    body = `<div class="mt-1">${kv([['name', D.name], ['version', D.version], ['commit', D.commit], ['entry', D.entry], ['declared in', D.declaredIn], ['source', D.source]])}</div>
+      ${pathRow(D.resolved)}
+      <p class="mt-4 text-[11.5px] leading-snug text-slate-500">Verified loaded by <span class="mono">opencode plugin list</span>, which reports ID, version and source. No broken or inert plugins are installed.</p>
+      <div class="mt-4">
+        <p class="lbl mb-2">provides ${D.provides.length} skills</p>
+        <div class="flex flex-wrap gap-1.5">
+          ${D.provides.map(s=>ENTITIES.some(e=>e.kind==='skill'&&e.id===s)
+            ? `<button class="btn !min-h-[28px] !py-0.5 !text-[11.5px]" data-open="skill" data-id="${esc(s)}">${esc(s)}</button>`
+            : `<span class="chip st-inactive">${esc(s)}</span>`).join('')}
+        </div>
+      </div>
+      ${D.note ? `<p class="mt-4 text-[11.5px] leading-snug text-slate-400">${esc(D.note)}</p>` : ''}`;
+  }
+
+  else if (kind === 'provider'){
+    chips = [chip('active','st-active'), chip(D.models+' models','st-avail')];
+    const [pid, mid] = id.split('/');
+    body = `<div class="mt-1">${kv([['provider', D.name], ['id', D.id], ['reachable models', String(D.models)], ['variant', D.variant], ['favorites', D.favorites.length ? D.favorites.join(', ') : 'none set']])}</div>
+      <p class="mt-4 text-[11.5px] leading-snug text-slate-400">${esc(D.note)}</p>
+      <div class="mt-4">
+        <p class="lbl mb-2">all ${D.models} models</p>
+        <div class="grid gap-1.5 sm:grid-cols-2">
+          ${D.modelList.map(m=>`<button class="row flex items-center gap-2 rounded-md border ${D.recent.includes(m)?'border-cyan-400/35 bg-cyan-400/[.07]':'border-white/[.07]'} px-2.5 py-1.5 text-left" data-open="model" data-id="${esc(m)}">
+            <span class="mono truncate text-[11.5px] ${D.recent.includes(m)?'text-cyan-100':'text-slate-300'}">${esc(m)}</span>
+            ${D.recent.includes(m)?chip('recent','st-avail'):''}
+          </button>`).join('')}
+        </div>
+      </div>`;
+  }
+
+  else if (kind === 'model'){
+    const P = SNAPSHOT.providers[0];
+    const recent = P.recent.includes(id);
+    chips = [chip(recent ? 'recently used' : 'available','st-avail'), chip('no auth required','st-inactive')];
+    body = `<div class="mt-1">${kv([['model', id], ['provider', P.name], ['variant', P.variant],
+      ['favorited', P.favorites.includes(id) ? 'yes' : 'no'],
+      ['used recently', recent ? 'yes' : 'no']])}</div>
+      <p class="mt-4 text-[11.5px] leading-snug text-slate-500">${esc(P.note)}</p>
+      <p class="mt-3 text-[11.5px] leading-snug text-slate-500">Every agent in this setup has an unset model and provider, so it inherits the session default rather than pinning its own.</p>`;
+  }
+
+  else if (kind === 'command'){
+    chips = [chip('slash command','st-avail'), chip('agent: '+D.agent,'st-local'), chip(D.subtask?'subtask':'foreground','st-inactive')];
+    body = `<div class="mt-1">${kv([['command', '/'+D.name], ['file', D.file, true], ['bound agent', D.agent], ['subtask', D.subtask ? 'true' : 'false'], ['size', kb(D.bytes)]])}</div>
+      <pre class="tape mono mt-4 overflow-x-auto rounded-lg border border-white/[.07] bg-black/35 p-3 text-[11.5px] text-slate-300"><code class="prose-x">${esc(D.body)}</code></pre>`;
+  }
+
+  else if (kind === 'automation'){
+    chips = [chip(D.status==='active'?'active':'inactive', D.status==='active'?'st-active':'st-inactive'), chip(D.kind,'st-inactive')];
+    body = `<p class="sub text-[13px]">${esc(D.desc)}</p>
+      <div class="mt-4">${kv([['name', D.name], ['kind', D.kind], ['status', D.status], D.bytes?['size', kb(D.bytes)]:null])}</div>
+      ${pathRow(D.path.startsWith('(') ? null : D.path)}
+      ${D.path.startsWith('(') ? `<p class="mt-3 text-[12px] text-slate-400">${esc(D.path)}</p>` : ''}`;
+  }
+
+  else if (kind === 'config'){
+    chips = [chip('on disk','st-active'), chip(kb(D.bytes||0),'st-inactive',false), chip(D.lang,'st-inactive',false)];
+    body = `<p class="sub text-[13px]">${esc(D.note)}</p>
+      ${pathRow(D.path)}
+      <div class="mt-3 flex justify-end">
+        <button class="btn !min-h-[30px] !py-1 !text-[12px]" data-copy="cfg-${esc(D.id)}"><i data-lucide="copy" class="h-3.5 w-3.5" aria-hidden="true"></i>Copy contents</button>
+      </div>
+      <pre class="tape mono mt-3 overflow-x-auto rounded-lg border border-white/[.07] bg-black/35 p-3.5 text-[11.5px] leading-[1.65] text-slate-300"><code id="cfg-${esc(D.id)}" class="prose-x">${esc(D.body)}</code></pre>`;
+  }
+
+  else if (kind === 'warning'){
+    chips = [chip(D.level==='warn'?'warning':'info', D.level==='warn'?'st-warn':'st-avail')];
+    body = `<p class="text-[13px] leading-relaxed text-slate-200">${esc(D.detail)}</p>
+      <div class="mt-4">${kv([['category', D.level], ['verified against', D.source, true]])}</div>
+      <p class="mt-4 text-[11.5px] text-slate-500">Nothing on this page was modified. Every finding is read-only.</p>`;
+  }
+
+  else if (kind === 'ctx'){
+    const all = [...SNAPSHOT.context.alwaysResident, ...SNAPSHOT.context.onDemand, ...SNAPSHOT.context.none];
+    const C = all.find(c => c.label === id) || D;
+    chips = [chip(C.kind === 'always' ? 'always resident' : C.kind === 'ondemand' ? 'on demand' : 'not present', C.kind==='always'?'st-active':C.kind==='ondemand'?'st-plugin':'st-inactive'),
+             chip('approximate','st-inactive',false)];
+    body = `<p class="sub text-[13px]">${esc(C.detail)}</p>
+      <div class="mt-4">${kv([['resource', C.label], ['measured size', kb(C.bytes)], ['estimated tokens', C.tokens === 0 ? '0' : '~' + C.tokens.toLocaleString()], ['rule', 'chars / 4']])}</div>
+      <div class="bar mt-4"><i style="width:${Math.min(100, Math.round(C.tokens/222272*100*8))}%"></i></div>
+      <p class="mt-4 text-[11.5px] leading-snug text-slate-500">${esc(SNAPSHOT.context.note)} Real tokenizer output will differ, typically by ±10%.</p>`;
+  }
+
+  else if (kind === 'metric'){
+    const o = SNAPSHOT.overview.find(x => x.key === id);
+    const zero = o.value === 0;
+    chips = [chip(zero ? 'empty' : 'live', zero?'st-inactive':'st-active')];
+    const links = {
+      agents: SNAPSHOT.agents, skills: SNAPSHOT.skills, mcps: SNAPSHOT.mcps,
+      plugins: SNAPSHOT.plugins, providers: SNAPSHOT.providers, project: SNAPSHOT.project ? [SNAPSHOT.project] : []
+    }[o.key] || [];
+    body = `<div class="mt-1">${kv([['metric', o.label], ['count', String(o.value)], ['detail', o.note], ['status', zero ? 'empty — nothing configured' : 'live']])}</div>
+      ${zero ? `<div class="glass-2 mt-4 flex items-start gap-2 p-3"><i data-lucide="circle-slash" class="mt-0.5 h-4 w-4 flex-none text-slate-500" aria-hidden="true"></i><p class="text-[12px] leading-snug text-slate-300">${esc(o.key==='project' ? SNAPSHOT.project.note : SNAPSHOT.mcpEvidence)}</p></div>`
+        : `<div class="mt-4 flex flex-wrap gap-1.5">${links.slice(0,12).map(x=>{
+            const k2 = o.key==='agents'?'agent':o.key==='skills'?'skill':o.key==='plugins'?'plugin':'provider';
+            /* entity id, not the display name — agents key on id ("build"), providers on id ("opencode") */
+            const eid = (k2==='agent' || k2==='provider') ? x.id : x.name;
+            const lbl = x.name || x.id;
+            return ENTITIES.some(e=>e.kind===k2 && e.id===eid)
+              ? `<button class="btn !min-h-[28px] !py-0.5 !text-[11.5px]" data-open="${k2}" data-id="${esc(eid)}">${esc(lbl)}</button>`
+              : `<span class="chip st-inactive">${esc(lbl)}</span>`;
+          }).join('')}${links.length>12?`<span class="chip st-inactive">+${links.length-12} more</span>`:''}</div>`}
+      ${pathRow(SNAPSHOT.meta.globalConfig)}`;
+  }
+
+  else if (kind === 'root'){
+    chips = [chip('runtime','st-active'), chip('v'+SNAPSHOT.meta.opencodeVersion,'st-avail'), chip('verified','st-inactive')];
+    body = `<div class="mt-1">${kv([
+      ['version', SNAPSHOT.meta.opencodeVersion],
+      ['verified by', SNAPSHOT.meta.versionEvidence],
+      ['host', SNAPSHOT.meta.host],
+      ['global config', SNAPSHOT.meta.globalConfig],
+      ['project root', SNAPSHOT.meta.projectRoot],
+      ['install', SNAPSHOT.meta.installPath],
+      ['state dir', SNAPSHOT.meta.stateDir],
+      ['project config', SNAPSHOT.meta.projectScoped ? 'present' : 'none — directory is empty']
+    ])}</div>
+    <div class="mt-4">
+      <p class="lbl mb-2">evidence commands</p>
+      <div class="flex flex-wrap gap-1.5">${SNAPSHOT.meta.apiEvidence.map(c=>`<span class="chip st-inactive"><span class="mono">${esc(c)}</span></span>`).join('')}</div>
+    </div>
+    <p class="mt-4 text-[11.5px] leading-snug text-slate-500">This page is a static snapshot. It executes nothing, reads no files and requires no running OpenCode process.</p>`;
+  }
+
+  return { title: E.title, chips, body };
+}
+
+function openDrawer(kind, id){
+  const d = detail(kind, id);
+  if (!d) return;
+  S.lastFocus = document.activeElement;
+  document.getElementById('dwKind').textContent = kind;
+  document.getElementById('dwTitle').textContent = d.title;
+  document.getElementById('dwChips').innerHTML = d.chips.join('');
+  document.getElementById('dwBody').innerHTML = d.body;
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawer').classList.add('drawer-in');
+  document.getElementById('scrim').classList.add('open');
+  S.open = true;
+  document.body.style.overflow = 'hidden';
+  document.getElementById('dwBody').scrollTop = 0;
+  icons();
+  document.getElementById('dwClose').focus();
+}
+function closeDrawer(){
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('scrim').classList.remove('open');
+  S.open = false;
+  document.body.style.overflow = '';
+  if (S.lastFocus && S.lastFocus.focus) S.lastFocus.focus();
+}
+function trapFocus(e){
+  if (!S.open || e.key !== 'Tab') return;
+  const f = document.getElementById('drawer').querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+  if (!f.length) return;
+  const first = f[0], last = f[f.length-1];
+  if (e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+}
+
+/* ============================== toast + copy ============================== */
+let tTimer;
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(tTimer);
+  tTimer = setTimeout(() => { t.style.opacity = '0'; }, 1900);
+}
+async function copyText(text, label){
+  try {
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); toast(label + ' copied'); return; }
+  } catch (_) {}
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.setAttribute('readonly',''); ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (_) {}
+  document.body.removeChild(ta);
+  toast(ok ? label + ' copied' : 'Copy blocked by browser — select the text manually');
+}
+
+/* ============================== icons + filters ============================== */
+function icons(){ if (window.lucide) lucide.createIcons(); }
+function buildFilters(){
+  const el = document.getElementById('filters');
+  /* counts exclude overview metric pseudo-entities so they read as real inventory */
+  el.innerHTML = CATS.map(c=>{
+    const n = ENTITIES.filter(e => e.kind !== 'metric' && (e.category === c.k || e.scope === c.k)).length;
+    return `<button class="btn !min-h-[32px] !py-1 !text-[12px]" data-filter="${c.k}" aria-pressed="${S.filters.has(c.k)}">
+      <i data-lucide="${c.icon}" class="h-3.5 w-3.5" aria-hidden="true"></i>${c.label}<span class="tnum ml-0.5 text-[11px] text-slate-500">${n}</span>
+    </button>`;
+  }).join('') + `<div class="flex items-center gap-1.5 sm:ml-auto sm:pl-2">
+      <span class="lbl hidden sm:inline">scope</span>
+      ${SCOPES.map(s=>`<button class="btn !min-h-[32px] !py-1 !text-[12px]" data-scope="${s.k}" aria-pressed="${S.filters.has(s.k)}">${s.label}</button>`).join('')}
+    </div>`;
+  icons();
+}
+function refreshFilterPressed(){
+  document.querySelectorAll('[data-filter],[data-scope]').forEach(b => b.setAttribute('aria-pressed', String(S.filters.has(b.dataset.filter || b.dataset.scope))));
+}
+
+/* ============================== events ============================== */
+function resetAll(){ S.q=''; S.filters.clear(); document.getElementById('q').value=''; refreshFilterPressed(); render(); toast('Reset'); }
+
+document.addEventListener('click', e => {
+  const open = e.target.closest('[data-open]');
+  if (open){
+    if (open.tagName.toLowerCase() === 'g'){
+      const kind = open.dataset.open === 'root' ? 'root' : open.dataset.open;
+      openDrawer(kind, open.dataset.id);
+    } else openDrawer(open.dataset.open, open.dataset.id);
+    return;
+  }
+  const cp = e.target.closest('[data-copy]');
+  if (cp){ const n = document.getElementById(cp.dataset.copy); if (n) copyText(n.textContent, 'Snippet'); return; }
+
+  const tab = e.target.closest('[data-tab]');
+  if (tab){
+    document.querySelectorAll('[role=tab]').forEach(t => t.setAttribute('aria-selected','false'));
+    document.querySelectorAll('[role=tabpanel]').forEach(p => p.hidden = true);
+    tab.setAttribute('aria-selected','true');
+    document.getElementById('panel-' + tab.dataset.tab).hidden = false;
+    return;
+  }
+
+  const f = e.target.closest('[data-filter]');
+  if (f){ const k=f.dataset.filter; S.filters.has(k)?S.filters.delete(k):S.filters.add(k); refreshFilterPressed(); render(); return; }
+  const s = e.target.closest('[data-scope]');
+  if (s){ const k=s.dataset.scope; S.filters.has(k)?S.filters.delete(k):S.filters.add(k); refreshFilterPressed(); render(); return; }
+
+  if (e.target.closest('#dwClose') || e.target.closest('#scrim')) closeDrawer();
+  if (e.target.closest('#btnRefresh')) resetAll();
+  if (e.target.closest('#vGrid')) setView('grid');
+  if (e.target.closest('#vGraph')) setView('graph');
+  if (e.target.closest('#empty button')) resetAll();
+
+  const link = e.target.closest('.glink');
+  if (link){
+    const [a,b] = link.dataset.edge.split('|');
+    document.querySelectorAll('.gedge').forEach(p => p.classList.toggle('hot', p.dataset.edge === link.dataset.edge));
+  }
+});
+
+function setView(v){
+  S.view = v;
+  const g = document.getElementById('vGrid'), h = document.getElementById('vGraph');
+  g.classList.toggle('on', v==='grid'); g.setAttribute('aria-pressed', String(v==='grid'));
+  h.classList.toggle('on', v==='graph'); h.setAttribute('aria-pressed', String(v==='graph'));
+  render();
+  if (v==='graph') document.getElementById('h-graph')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block:'start' });
+}
+
+let qTimer;
+document.getElementById('q').addEventListener('input', e => {
+  clearTimeout(qTimer);
+  qTimer = setTimeout(() => { S.q = e.target.value.trim(); render(); }, 130);
+});
+document.getElementById('q').addEventListener('keydown', e => { if (e.key==='Escape' && e.target.value){ e.target.value=''; S.q=''; render(); } });
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape'){ if (S.open) closeDrawer(); return; }
+  if (e.key === '/' && !S.open && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)){ e.preventDefault(); document.getElementById('q').focus(); }
+  trapFocus(e);
+  if ((e.key==='Enter'||e.key===' ') && e.target.classList?.contains('gnode')){ e.preventDefault(); e.target.dispatchEvent(new MouseEvent('click',{bubbles:true})); }
+});
+
+document.getElementById('drawer').addEventListener('animationend', function(){ this.classList.remove('drawer-in'); });
+
+/* ============================== boot ============================== */
+document.getElementById('hdrMeta').textContent = 'v' + SNAPSHOT.meta.opencodeVersion + ' · ' + SNAPSHOT.meta.host + ' · snap ' + SNAPSHOT.meta.generated;
+document.getElementById('snapStamp').textContent = 'snapshot ' + SNAPSHOT.meta.generated + ' · ' + ENTITIES.length + ' entities';
+render();
+icons();
+</script>
+</body>
+</html>
