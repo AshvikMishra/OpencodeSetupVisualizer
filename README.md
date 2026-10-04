@@ -18,6 +18,12 @@ being guesswork.
 
 <sub>Zero dependencies · Node >= 18 · nothing leaves your machine</sub>
 
+![The dashboard: counts read live from OpenCode, with an agent fleet, context
+overhead breakdown, config inspector and verified findings](docs/dashboard.png)
+
+<sub>Rendered from the synthetic test fixture, not a real machine — see
+[Privacy](#privacy-wasnt-a-feature-it-was-a-constraint).</sub>
+
 ---
 
 ## What I built it for
@@ -71,10 +77,12 @@ dangerous — so the design started from "what could possibly leak" rather than
 
 Concretely:
 
-- **The dashboard template is never modified.** It's copied byte-for-byte and its
-  SHA-256 is pinned in a test. If it ever changes, the suite fails. All
-  customisation happens in memory at serve time, so there's no way for a bad edit
-  to persist.
+- **The dashboard template is copied, not rewritten.** It's read byte-for-byte and
+  its SHA-256 is pinned in a test, so any change fails the suite. All data
+  injection happens in memory at serve time. The pin has been re-cut exactly once,
+  for three data bindings that replaced hardcoded values with reads from the
+  snapshot: the skill total, the project-local resource count, and which provider
+  a model's drawer describes. Nothing else in the template was touched.
 - **A privacy boundary, not a filter.** Everything leaving the process passes
   through one recursive sanitizer. It combines structural detection (key names
   normalised for case and camelCase, so `PaSsWoRd` and `api_key` both match) with
@@ -148,7 +156,7 @@ Discovers your OpenCode install, serves the dashboard on `127.0.0.1:4173` with l
 data injected, opens your browser. `Ctrl+C` stops it. Zero dependencies, Node >= 18.
 
 ```bash
-npm test          # 71 tests, no browser needed
+npm test          # 158 tests, no browser needed
 npm run verify    # browser-driven parity, functional, edge-case and privacy checks
 npm run audit:prepush   # scans everything Git would publish for leaks
 ```
@@ -182,8 +190,8 @@ for but untested — I won't claim support I didn't exercise.
 
 ## Known limitations
 
-- The template is unmodified, so its own text is still there: the `static snapshot`
-  badge, the `Redacted: service.json → password` footer, and the Reset button.
+- The template's own text is still there: the `static snapshot` badge, the
+  `Redacted: service.json → password` footer, and the Reset button.
 - Not fully offline — see above.
 - Tokens are chars/4 estimates, labelled approximate.
 - A cold `opencode api get` call can return a partial payload. The tool reports
