@@ -1,0 +1,42 @@
+{
+  "name": "opencode-setup-visualizer",
+  "version": "1.0.0",
+  "description": "Discover your real OpenCode setup and view it in the existing dashboard, served locally. Read-only, zero dependencies, nothing leaves the machine.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "opencode-setup-visualizer": "bin/opencode-setup-visualizer.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin/opencode-setup-visualizer.js",
+    "src/**/*.js",
+    "template/opencode-dashboard-example.html",
+    "README.md",
+    "PLAN.md"
+  ],
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "verify": "node verification/run-all.mjs",
+    "verify:parity": "node verification/parity.mjs",
+    "verify:functional": "node verification/functional.mjs",
+    "verify:edge": "node verification/edge-data.mjs",
+    "verify:privacy": "node verification/privacy.mjs",
+    "verify:mutations": "node verification/mutations.mjs",
+    "verify:live": "node verification/live.mjs",
+    "verify:packaging": "node verification/packaging.mjs",
+    "audit:prepush": "node verification/prepush-audit.mjs",
+    "audit:mutation": "node verification/audit-mutation.mjs",
+    "verify:browser": "node verification/browser.mjs"
+  },
+  "keywords": [
+    "opencode",
+    "observability",
+    "dashboard",
+    "cli"
+  ],
+  "dependencies": {},
+  "devDependencies": {}
+}

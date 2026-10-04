@@ -1,138 +1,192 @@
-# OpenCode Setup Visualizer
+# opencode-setup-visualizer
 
-A single-file, offline observability dashboard for a **real** OpenCode installation.
+**See what your agent setup actually costs you.**
 
-`opencode-dashboard.html` is a static snapshot of what OpenCode actually reports about
-itself — agents, skills, plugins, MCP servers, providers, models, config files and
-context cost. It renders only what was verified on disk or via the OpenCode CLI/API.
-Nothing is mocked, and a resource that does not exist is shown as an explicit empty
-state rather than omitted.
+Your OpenCode setup is invisible. You have dozens of skills, a plugin tree, config
+files scattered across two directories, and a number in a file somewhere called
+`tokens`. None of it tells you what any of it is *doing* to you — until you count
+yourself.
 
-![sections](https://img.shields.io/badge/sections-10-38e0d0?style=flat-square)
-![deps](https://img.shields.io/badge/external_deps-2-CDNs-f0a92b?style=flat-square)
-![build](https://img.shields.io/badge/build-none-3ddc84?style=flat-square)
-
----
-
-## Quick start
-
-Open the file. That is the entire setup.
+This tool reads your real installation and shows you the bill.
 
 ```
-opencode-dashboard.html          # double-click, or drag into any browser
+24 skills · 1.4k tokens resident in every single session
 ```
 
-No install, no build, no server, no Node. The page makes **no network calls of its own**
-and executes no shell commands.
+That's the number that made me cut things. Once you can see it, optimising stops
+being guesswork.
+
+<sub>Zero dependencies · Node >= 18 · nothing leaves your machine</sub>
 
 ---
 
-## What it visualizes
+## What I built it for
 
-| Section | Contents |
-|---|---|
-| **Overview** | Live counts with drill-down; always-resident token cost |
-| **Agent Fleet** | Mode, visibility, deny/ask permission rules, tools, source |
-| **MCP Servers** | Explicit empty state when none are configured |
-| **Skills & Automation** | Searchable grid split by scope, plus slash commands and the router |
-| **Plugins** | Version, commit, resolved path, provided skills |
-| **Providers & Models** | Reachable providers and every available model |
-| **Config Inspector** | Tabbed, sanitized viewer of the real config files with copy buttons |
-| **Context Overhead** | Approximate token cost, split always-resident vs on-demand |
-| **Verified Findings** | Configuration problems confirmed against files or commands |
-| **Project Scope** | Explicit empty state when a project contributes no config |
-| **Relationship Graph** | Grid ↔ Graph toggle over config-derived edges only |
+I wanted to look at my setup. Then I wanted to *share* it — and a screenshot of a
+dashboard can't do that. What I have instead is a JSON snapshot that another person
+could hand to an agent and say: *build me something like this.*
 
-### Interaction
-
-Global search (`/` to focus), category and scope filters, Grid ↔ Graph toggle,
-click any entity for a detail drawer, `Esc` to close, focus trapping, and
-`prefers-reduced-motion` support.
+That's the v2 direction. This is v1: the collector already produces exactly that
+artifact (`--json`), it's already sanitised, and it's already deterministic. The
+visualisation is how I found the problems in the first place.
 
 ---
 
-## Regenerating the snapshot
+## The part I'm proudest of: context overhead
 
-All data lives in one `SNAPSHOT` object at the top of the inline `<script>`. Presentation
-lives entirely below it, so you can refresh the data without touching the UI.
+Every session silently pays a tax before you type a word. Most of it is
+*frontmatter* — the name and description of every skill you own, loaded on every
+single turn so the model knows what it *could* reach. That index is pure overhead
+until a skill actually fires.
+
+The dashboard breaks it down:
+
+- **Always resident** — what you're paying before your first message. The skill
+  index is almost always the biggest line item.
+- **On demand** — the bodies, which cost nothing until invoked. This is where the
+  real cost hides if you misread the first chart.
+- **Not present** — zero, but stated explicitly. Zero cost and *unknown* are very
+  different, and a dashboard that can't tell you apart is lying by omission.
+
+It measures real bytes on disk and the real character counts the CLI reports. The
+chars/4 rule is an estimate and the dashboard says so; a real tokenizer typically
+lands within ±10%.
+
+**What I changed because of it:**
+
+The clearest win was retiring an MCP server and moving that capability to the CLI.
+An MCP server injects its tool schemas into context permanently. A CLI subcommand
+costs nothing until invoked. Same capability, and the resident number dropped
+because a whole schema block stopped being charged to every session. That
+dashboard is why I knew to do it, and why I'd know when to do it again.
+
+---
+
+## Privacy wasn't a feature, it was a constraint
+
+The tool reads the directory that holds your credentials, then hands you a page
+that renders its contents in full. Getting that wrong isn't embarrassing, it's
+dangerous — so the design started from "what could possibly leak" rather than
+"what should I bother masking."
+
+Concretely:
+
+- **The dashboard template is never modified.** It's copied byte-for-byte and its
+  SHA-256 is pinned in a test. If it ever changes, the suite fails. All
+  customisation happens in memory at serve time, so there's no way for a bad edit
+  to persist.
+- **A privacy boundary, not a filter.** Everything leaving the process passes
+  through one recursive sanitizer. It combines structural detection (key names
+  normalised for case and camelCase, so `PaSsWoRd` and `api_key` both match) with
+  pattern detection (key prefixes, JWTs, PEM blocks, credential-in-URL, high-entropy
+  tokens). Then `assertClean()` re-scans the serialised output and **aborts rather
+  than serving** if anything still matches.
+- **Config file *bodies* are re-parsed.** This was a real bug I found and fixed:
+  a key inside a JSON blob is invisible to object-walking, so a password sitting in
+  `cli.json` sailed straight through. The sanitizer now parses bodies and applies
+  the same rules.
+- **Credential stores are shape-only.** `service.json` and `auth.json` are opened
+  solely to read their key *names*. Values are never read into the snapshot, never
+  logged, never emitted. The redaction report holds counts per kind and never a
+  value.
+- **Provider API keys are dropped wholesale.** The `settings` object is discarded
+  before an entry is even normalised.
+- **Skill bodies are never emitted.** The API hands you every `SKILL.md` in full;
+  only the character count is kept.
+- **Your paths are tokenised.** `%USERPROFILE%` or `~`, everywhere.
+- **Nothing leaves the machine.** No telemetry, no analytics, no outbound HTTP
+  client anywhere in the source. The server binds loopback and answers nothing but
+  `127.0.0.1`.
+
+The `--json` output is a shareable artifact *by construction*, not by a cleanup step
+you forgot to run. That's what makes the v2 "hand someone a snapshot" plan viable —
+and it's also why there's a pre-push audit, which scans everything Git would publish
+for leaks and is mutation-tested so it can't pass vacuously.
+
+---
+
+## What it shows you
+
+Ten sections, all measured, none guessed: agents and what they're allowed to do,
+skills with their real on-disk sizes, plugins and the skills each provides, MCP
+servers, providers and reachable models, slash commands, context overhead, a config
+inspector with a redacted view of your actual files, verified findings, and a
+relationship graph.
+
+A drawer on anything explains it. So does an honest empty state — if a source
+couldn't be read, the dashboard says so in that section rather than quietly
+rendering nothing, because "zero" and "unknown" are different answers.
+
+**What leaves the machine: nothing.** One nuance worth stating plainly — the
+dashboard template loads Tailwind, Lucide and Google Fonts from CDNs, so the *page*
+needs internet for styling and icons. Those requests come from the template's own
+tags, not from this tool. It is not fully offline.
+
+---
+
+## Who it's for
+
+Anyone running OpenCode with a non-trivial setup — enough skills that the resident
+context index has become a number worth arguing with, and enough customisation that
+nobody remembers what's configured. If you're still on the built-in defaults, this
+will tell you that, which is also useful.
+
+If you've ever installed a skill and genuinely didn't know whether it was being
+loaded every turn: this answers that.
+
+It is read-only and makes no changes to your configuration.
+
+---
+
+## Running it
 
 ```bash
-opencode --version                              # meta.opencodeVersion
-opencode api get /api/agent                     # → SNAPSHOT.agents
-opencode api get /api/skill                     # → SNAPSHOT.skills
-opencode api get /api/provider                  # → SNAPSHOT.providers
-opencode models                                 # → provider.modelList
-opencode mcp list                               # → SNAPSHOT.mcps (may be empty)
-opencode plugin list                            # → SNAPSHOT.plugins
+node bin/opencode-setup-visualizer.js
 ```
 
-Then edit the `SNAPSHOT` object. Each entity is plain data; every field is optional.
+Discovers your OpenCode install, serves the dashboard on `127.0.0.1:4173` with live
+data injected, opens your browser. `Ctrl+C` stops it. Zero dependencies, Node >= 18.
 
-### Local paths
+```bash
+npm test          # 71 tests, no browser needed
+npm run verify    # browser-driven parity, functional, edge-case and privacy checks
+npm run audit:prepush   # scans everything Git would publish for leaks
+```
 
-Set `SNAPSHOT.meta.userName` to the Windows account that owns the config. All paths are
-stored as `%USERPROFILE%` and expanded at render time, so the file contains **no
-hard-coded username** and is safe to commit or share.
+<details>
+<summary>Flags</summary>
 
----
-
-## Security
-
-The dashboard is read-only, but it renders live local configuration, so a few things
-matter before publishing.
-
-**What was checked**
-
-- No secrets. `service.json`'s local service password is redacted everywhere, including
-  the config tab. No API keys, tokens, or auth material are embedded.
-- No `eval`, `new Function`, `document.write`, or dynamic `script.src`.
-- All `innerHTML` writes pass through a single `esc()` helper. Every interpolated value in
-  the render functions is escaped — verified by an AST-style sweep that found zero
-  unwrapped interpolations.
-- No `fetch`, `XMLHttpRequest`, WebSocket, or storage APIs. The page cannot phone home.
-- Zero horizontal overflow at 375 / 390 / 768 / 1024 / 1440 px.
-- Git history contains no secrets.
-
-**Dependencies** — two CDNs, both the only external runtime dependencies:
-
-| CDN | Purpose |
+| Flag | Effect |
 |---|---|
-| `cdn.tailwindcss.com` | Tailwind (required; note its own production advisory) |
-| `unpkg.com/lucide@1.50.0` | Icons, **version-pinned with Subresource Integrity** |
+| `--port <n>` | Listen on `n` (default `4173`); walks forward if busy |
+| `--project <dir>` | Project directory to inspect (default: cwd) |
+| `--no-open` | Don't launch a browser |
+| `--no-contents` | Hide config file bodies; keeps paths and sizes |
+| `--json` | Print the sanitized snapshot and exit |
+| `--out <file.html>` | Write a static sanitized copy and exit |
 
-`.gitignore` blocks `service.json`, `auth.json`, `*.db`, `*.pem`, `.env*` and
-`.opencode/` so local secrets cannot be committed by accident.
+**To refresh, reload the tab.** The template's Reset button only re-runs in-page
+filters and search — it doesn't re-collect. The server collects on every request,
+so a reload is always fresh.
+</details>
 
-**Known limitations**
+<details>
+<summary>Platform support</summary>
 
-- The file discloses local config *paths* and skill/plugin *names* from this machine.
-  That is the point of the tool, but review it before pushing to a public repo.
-- Tailwind's CDN build is not intended for production. It is used here because this
-  project is explicitly a no-build, single-file deliverable.
-- The Lucide SRI hash pins `1.50.0`. If you change that version you must recompute the
-  `integrity` hash or icons silently fail.
+Tested on Windows 11 (PowerShell 5.1), Node 24, Edge. macOS and Linux are written
+for but untested — I won't claim support I didn't exercise.
 
----
-
-## Verification
-
-Checked with Playwright CLI against local Edge: JS parses clean, zero console errors,
-67 interactive entities open a populated drawer, zero dead links, 114 Lucide icons
-render, 9 config tabs show exactly one panel at a time, clipboard copy works, and
-reduced-motion collapses animation to 1 µs. The Impeccable design detector reports zero
-findings.
+</details>
 
 ---
 
-## Current snapshot
+## Known limitations
 
-Taken from OpenCode **v2.0.22** on Windows 11:
-
-- 7 agents (4 selectable, 3 hidden internal) — all built-in, no custom agent files
-- 24 skills — 2 built-in, 14 plugin-provided, 8 local
-- 1 plugin — `superpowers` 6.4.2
-- 0 MCP servers
-- 1 provider, 10 available models
-- 0 project-local resources
-
-Always-resident context ≈ **1.6k tokens**; on-demand skill bodies ≈ **59k** (chars/4).
+- The template is unmodified, so its own text is still there: the `static snapshot`
+  badge, the `Redacted: service.json → password` footer, and the Reset button.
+- Not fully offline — see above.
+- Tokens are chars/4 estimates, labelled approximate.
+- A cold `opencode api get` call can return a partial payload. The tool reports
+  what it was given rather than inventing numbers.
+- `--out` is sanitised but still reveals your local path structure and your skill
+  and plugin names. Read it before you publish.

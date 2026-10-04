@@ -23,9 +23,15 @@ desktop.ini
 .idea/
 *.log
 
-# Playwright CLI test artifacts
+# Browser-driven verification output.
+# Narrow, not a global *.png: a README diagram or docs screenshot is a real
+# source file and must stay committable.
 .playwright-cli/
-*.png
+verification/artifacts/
+
+# node_modules is not ignored here on purpose. The project has zero
+# dependencies, so it should never exist; if it appears, that is a bug worth
+# seeing rather than a routine occurrence to hide.
 
 # User-specific files
 opencode-dashboard.html

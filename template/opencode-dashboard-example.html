@@ -708,20 +708,33 @@ function renderMcps(){
   if (SNAPSHOT.mcps.length) return '';
   const vis = matches({kind:'metric',id:'mcps',title:'MCP servers',sub:'',status:'inactive',category:'mcps',scope:null,hay:'mcp servers'});
   if (!vis) return '';
+  // Read the measured cost rather than asserting a literal "0 tokens".
+  const mcpSchemaRow = (SNAPSHOT.context.none || []).find(r => r.label === 'MCP tool schemas');
+  // The Context section already distinguishes "list read and empty" from
+  // "list could not be read" (tokens null). Reuse that single signal so the two
+  // sections cannot contradict each other.
+  const notRead = !mcpSchemaRow || mcpSchemaRow.tokens === null;
+  const costText = notRead ? 'not measured'
+    : (mcpSchemaRow.tokens === 0 ? '0' : '~' + tok(mcpSchemaRow.tokens));
+  const subLine = notRead
+    ? 'The MCP server list could not be read, so the tool-schema cost was not measured.'
+    : 'The MCP server list was read and is empty, so no tool schema is injected and MCP contributes '
+      + '<span class="mono text-slate-200">' + costText + '</span> to context.';
   return `<section aria-labelledby="h-mcp">
-    ${secHead('MCP Servers', 'No MCP server is configured. This is an empty state, not a rendering failure.', 'h-mcp')}
+    ${secHead('MCP Servers', notRead
+      ? 'The MCP server list could not be read. This may be an incomplete result, not an empty state.'
+      : 'The MCP server list was read and is empty. This is a real empty state, not a rendering failure.', 'h-mcp')}
     <div class="glass empty-dash p-7">
       <div class="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
         <span class="grid h-11 w-11 flex-none place-items-center rounded-xl border border-white/12 bg-white/[.03]">
           <i data-lucide="plug-zap" class="h-5 w-5 text-slate-500" aria-hidden="true"></i>
         </span>
         <div class="min-w-0 flex-1">
-          <p class="text-base font-semibold tracking-tight">Zero MCP servers</p>
-          <p class="sub mt-1">No tool schemas are injected into any session, and MCP contributes <span class="mono text-slate-200">0 tokens</span> to context.</p>
+          <p class="text-base font-semibold tracking-tight">${SNAPSHOT.mcps.length} MCP server(s) discovered</p>
+          <p class="sub mt-1">${subLine}</p>
           <div class="mt-3 flex flex-wrap gap-1.5">
-            ${chip('opencode mcp list → none','st-inactive',false)}
-            ${chip('no mcp key in opencode.json','st-inactive',false)}
-            ${chip('historically had 1 · removed','st-warn',false)}
+            ${chip(notRead ? 'server list not read' : 'server list read', notRead ? 'st-warn' : 'st-inactive', false)}
+            ${notRead ? chip('tool schema size not measured','st-warn',false) : ''}
           </div>
         </div>
       </div>
@@ -753,7 +766,7 @@ function renderSkills(){
   const by = k => list.filter(s=>s.scope===k);
   return `<section aria-labelledby="h-skills">
     ${secHead('Skills & Automation',
-      `${list.length} of 24 skills returned by <span class="mono">/api/skill</span>. Duplicate physical copies are counted once — OpenCode resolves one path per capability.`, 'h-skills')}
+      `${list.length} of ${SNAPSHOT.skills.length} skills returned by <span class="mono">/api/skill</span>. Duplicate physical copies are counted once — OpenCode resolves one path per capability.`, 'h-skills')}
     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       ${list.map(skillCard).join('')}
     </div>
@@ -836,8 +849,9 @@ function renderPlugins(){
 function renderProviders(){
   const list = SNAPSHOT.providers.filter(p => matches(ENTITIES.find(e=>e.kind==='provider'&&e.id===p.id)));
   if (!list.length) return '';
+  const totalModels = list.reduce((a,p)=>a+p.models,0);
   return `<section aria-labelledby="h-prov">
-    ${secHead('Providers & Models', 'One provider is reachable. The model list is exactly what the CLI returned.', 'h-prov')}
+    ${secHead('Providers & Models', `${list.length} provider${list.length===1?'':'s'} read, ${totalModels} model${totalModels===1?'':'s'} in total. The model list is exactly what the CLI returned.`, 'h-prov')}
     <div class="grid gap-3 lg:grid-cols-2">
       ${list.map(p=>`<div class="glass overflow-hidden">
         <div class="flex flex-wrap items-center gap-3 border-b border-white/10 px-4 py-3">
@@ -904,12 +918,19 @@ function renderContext(){
   if (!vis) return '';
   const row = (c, i) => {
     const max = Math.max(total, od);
+    // null tokens = not measured. Rendered as such; never coerced to 0 and
+    // never fed to toLocaleString(), which throws on null.
+    const unmeasured = c.tokens === null || c.tokens === undefined;
+    const tokCell = unmeasured ? 'not measured'
+      : (c.tokens === 0 ? '0' : '~' + tok(c.tokens));
+    const barPct = unmeasured || max === 0 ? 0
+      : Math.max(c.tokens ? 2 : 0, Math.round(c.tokens / max * 100));
     return `<button class="row w-full rounded-lg border border-white/[.07] px-3 py-2.5 text-left" data-open="ctx" data-id="${esc(c.label)}">
       <div class="flex items-baseline justify-between gap-3">
         <span class="min-w-0 truncate text-[13px] font-medium">${esc(c.label)}</span>
-        <span class="tnum flex-none font-mono text-[12px] ${c.tokens===0?'text-slate-500':'text-cyan-200'}">${c.tokens===0?'0':('~'+tok(c.tokens))} tok</span>
+        <span class="tnum flex-none font-mono text-[12px] ${c.tokens===0||unmeasured?'text-slate-500':'text-cyan-200'}">${tokCell}${unmeasured?'':' tok'}</span>
       </div>
-      <div class="bar mt-2 ${c.kind==='ondemand'?'am':''}"><i style="width:${Math.max(c.tokens?2:0,Math.round(c.tokens/max*100))}%"></i></div>
+      <div class="bar mt-2 ${c.kind==='ondemand'?'am':''}"><i style="width:${barPct}%"></i></div>
       <p class="mt-1.5 text-[11px] text-slate-400">${esc(c.detail)}</p>
     </button>`;
   };
@@ -987,18 +1008,24 @@ function renderProject(){
   const p = SNAPSHOT.project;
   const vis = matches({kind:'metric',id:'project',title:'Project-local',sub:'',status:'inactive',category:'project',scope:null,hay:'project local'});
   if (!vis) return '';
+  const projTotal = p.localSkills.length + p.localAgents.length + p.localPlugins.length
+    + p.localMcps.length + p.localConfig.length;
   return `<section aria-labelledby="h-proj">
-    ${secHead('Project Scope', 'This project contributes no OpenCode configuration of its own.', 'h-proj')}
+    ${secHead('Project Scope', projTotal
+      ? 'Configuration found in this project directory.'
+      : 'This project contributes no OpenCode configuration of its own.', 'h-proj')}
     <div class="glass empty-dash p-6">
       <div class="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
         <span class="grid h-10 w-10 flex-none place-items-center rounded-xl border border-violet-400/25 bg-violet-400/[.08]">
           <i data-lucide="folder-open" class="h-5 w-5 text-violet-300" aria-hidden="true"></i>
         </span>
         <div class="min-w-0 flex-1">
-          <p class="text-[15px] font-semibold tracking-tight">0 project-local resources</p>
+          <p class="text-[15px] font-semibold tracking-tight">${p.truncated
+            ? projTotal + '+ project-local resources'
+            : projTotal + ' project-local resource' + (projTotal === 1 ? '' : 's')}</p>
           <p class="sub mt-1">${esc(p.note)}</p>
         </div>
-        ${chip('empty','st-inactive')}
+        ${chip(projTotal ? 'found' : 'empty', projTotal ? 'st-active' : 'st-inactive')}
       </div>
       <div class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         ${[['Skills','localSkills'],['Agents','localAgents'],['Plugins','localPlugins'],['MCP servers','localMcps']].map(([l,k])=>`
@@ -1200,19 +1227,41 @@ function detail(kind, id){
   }
 
   else if (kind === 'model'){
-    const P = SNAPSHOT.providers[0];
+    // The entity carries its own provider; hardcoding providers[0] showed the
+    // first provider's name, favorites and note for every other provider's
+    // model.
+    const P = (D.data && D.data.provider) || SNAPSHOT.providers[0];
+    if (!P) {
+      chips = [chip('provider unknown','st-inactive')];
+      body = `<div class="mt-1">${kv([['model', id], ['provider', 'not recorded']])}</div>`;
+    } else {
     const recent = P.recent.includes(id);
     chips = [chip(recent ? 'recently used' : 'available','st-avail'), chip('no auth required','st-inactive')];
     body = `<div class="mt-1">${kv([['model', id], ['provider', P.name], ['variant', P.variant],
       ['favorited', P.favorites.includes(id) ? 'yes' : 'no'],
       ['used recently', recent ? 'yes' : 'no']])}</div>
       <p class="mt-4 text-[11.5px] leading-snug text-slate-500">${esc(P.note)}</p>
-      <p class="mt-3 text-[11.5px] leading-snug text-slate-500">Every agent in this setup has an unset model and provider, so it inherits the session default rather than pinning its own.</p>`;
+      <p class="mt-3 text-[11.5px] leading-snug text-slate-500">${(() => {
+        const ag = SNAPSHOT.agents || [];
+        if (!ag.length) return 'No agent was discovered, so no model is pinned by one.';
+        const pinned = ag.filter(a => a.model && !/^unset/i.test(a.model));
+        return pinned.length
+          ? pinned.length + ' of ' + ag.length + ' agents pin a model of their own: ' +
+            pinned.map(a => a.name).join(', ') + '.'
+          : 'All ' + ag.length + ' agents have an unset model and provider, so they inherit the session default rather than pinning their own.';
+      })()}</p>`;
+    }
   }
 
   else if (kind === 'command'){
-    chips = [chip('slash command','st-avail'), chip('agent: '+D.agent,'st-local'), chip(D.subtask?'subtask':'foreground','st-inactive')];
-    body = `<div class="mt-1">${kv([['command', '/'+D.name], ['file', D.file, true], ['bound agent', D.agent], ['subtask', D.subtask ? 'true' : 'false'], ['size', kb(D.bytes)]])}</div>
+    // `agent` and `subtask` are null when the file does not state them. That is
+    // reported as "not stated", never as a default agent or a foreground guess.
+    const agentText = D.agent ? 'agent: '+D.agent : 'agent: not stated';
+    const subtaskChip = D.subtask === null || D.subtask === undefined
+      ? 'subtask: not stated' : (D.subtask ? 'subtask' : 'foreground');
+    chips = [chip('slash command','st-avail'), chip(agentText,'st-local'), chip(subtaskChip,'st-inactive')];
+    body = `<div class="mt-1">${kv([['command', '/'+D.name], ['file', D.file, true], ['bound agent', D.agent || 'not stated in the file'],
+      ['subtask', D.subtask === null || D.subtask === undefined ? 'not stated in the file' : String(D.subtask)], ['size', kb(D.bytes)]])}</div>
       <pre class="tape mono mt-4 overflow-x-auto rounded-lg border border-white/[.07] bg-black/35 p-3 text-[11.5px] text-slate-300"><code class="prose-x">${esc(D.body)}</code></pre>`;
   }
 
@@ -1246,9 +1295,19 @@ function detail(kind, id){
     const C = all.find(c => c.label === id) || D;
     chips = [chip(C.kind === 'always' ? 'always resident' : C.kind === 'ondemand' ? 'on demand' : 'not present', C.kind==='always'?'st-active':C.kind==='ondemand'?'st-plugin':'st-inactive'),
              chip('approximate','st-inactive',false)];
+    // bytes/tokens are null when the cost could not be measured. That is shown
+    // as "not measured" — never coerced to 0, which would read as a real
+    // measurement, and never passed to toLocaleString(), which would throw.
+    const measured = C.bytes !== null && C.bytes !== undefined;
+    const tokText = C.tokens === null || C.tokens === undefined
+      ? 'not measured'
+      : (C.tokens === 0 ? '0' : '~' + C.tokens.toLocaleString());
+    const sizeText = measured ? kb(C.bytes) : 'not measured';
+    const barW = (C.tokens === null || C.tokens === undefined)
+      ? 0 : Math.min(100, Math.round(C.tokens / 222272 * 100 * 8));
     body = `<p class="sub text-[13px]">${esc(C.detail)}</p>
-      <div class="mt-4">${kv([['resource', C.label], ['measured size', kb(C.bytes)], ['estimated tokens', C.tokens === 0 ? '0' : '~' + C.tokens.toLocaleString()], ['rule', 'chars / 4']])}</div>
-      <div class="bar mt-4"><i style="width:${Math.min(100, Math.round(C.tokens/222272*100*8))}%"></i></div>
+      <div class="mt-4">${kv([['resource', C.label], ['measured size', sizeText], ['estimated tokens', tokText], ['rule', 'chars / 4']])}</div>
+      <div class="bar mt-4"><i style="width:${barW}%"></i></div>
       <p class="mt-4 text-[11.5px] leading-snug text-slate-500">${esc(SNAPSHOT.context.note)} Real tokenizer output will differ, typically by ±10%.</p>`;
   }
 
