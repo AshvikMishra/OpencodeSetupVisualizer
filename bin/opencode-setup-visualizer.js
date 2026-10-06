@@ -61,14 +61,27 @@ export function parseArgs(argv) {
   return out;
 }
 
+/**
+ * The argv used to open a URL. Exported so the launch shape is testable
+ * without spawning a browser.
+ *
+ * The URL is passed UNQUOTED on purpose. `cmd /c start` treats a quoted first
+ * token as the new window's TITLE and is then left with no target at all: it
+ * opens nothing and `cmd` never exits. Quoting was defending against a
+ * re-split that cannot happen here — `url` is always a loopback
+ * `http://127.0.0.1:<port>/`, carrying no spaces or shell metacharacters.
+ */
+export function browserCommand(url) {
+  if (process.platform === 'win32') return { command: 'cmd', args: ['/c', 'start', '', url] };
+  if (process.platform === 'darwin') return { command: 'open', args: [url] };
+  return { command: 'xdg-open', args: [url] };
+}
+
 /** Open a URL with fixed argv. Never builds a command string. */
 function openBrowser(url) {
-  // The URL is passed already quoted: `start` re-parses its arguments.
-  const table = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', `"${url}"`]]
-    : process.platform === 'darwin' ? ['open', [url]]
-      : ['xdg-open', [url]];
+  const { command, args } = browserCommand(url);
   try {
-    const child = spawn(table[0], table[1], { stdio: 'ignore', windowsHide: true, detached: true });
+    const child = spawn(command, args, { stdio: 'ignore', windowsHide: true, detached: true });
     child.on('error', () => {});
     child.unref();
   } catch {

@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -101,12 +101,26 @@ test('the only shell:true usage is the fixed browser-launch argv table', () => {
   const bin = path.join(BIN, 'opencode-setup-visualizer.js');
   const src = code(bin);
   // Both branches must pass an explicit argv array, never a concatenated string.
-  // The URL is passed pre-quoted so cmd.exe's `start` cannot re-split it.
-  assert.match(src, /\['\/c',\s*'start',\s*'',\s*`"\$\{url\}"`\]/);
-  assert.match(src, /\['open',\s*\[url\]\]|'open', \[url\]/);
+  assert.match(src, /\['\/c',\s*'start',\s*'',\s*url\]/);
+  assert.match(src, /'open',\s*args:\s*\[url\]|'open',\s*\[url\]/);
   // No discovered value may reach a shell string.
   assert.ok(!/\$\{\s*(path|file|name|dir|abs)\s*\}/.test(src),
     'a path-ish variable must never be interpolated into the launch argv');
+});
+
+test('the browser launch URL must not be pre-quoted', async () => {
+  // `cmd /c start` reads a quoted first token as the window TITLE, leaving no
+  // target: the browser never opens and cmd never exits. Regression guard for
+  // the launch silently doing nothing.
+  // pathToFileURL: on Windows a bare absolute path is not a valid ESM specifier.
+  const { browserCommand } = await import(pathToFileURL(path.join(BIN, 'opencode-setup-visualizer.js')).href);
+  const { args } = browserCommand('http://127.0.0.1:4173/');
+  assert.deepEqual(args, ['/c', 'start', '', 'http://127.0.0.1:4173/']);
+  // The target argument is the bare URL: no wrapping quotes, no re-quoting.
+  const target = args[args.length - 1];
+  assert.ok(!/^["']/.test(target), `launch target must be unquoted, got ${target}`);
+  assert.ok(!/\\/.test(target) && !/%22/.test(target),
+    'launch target must not be backslash-escaped or percent-encoded');
 });
 
 test('the only file write in the whole tool is the explicit --out destination', () => {
