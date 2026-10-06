@@ -25,15 +25,17 @@ const sha256 = p => crypto.createHash('sha256').update(fs.readFileSync(p)).diges
  * `EXAMPLE-OUTPUT/`, which proved only that a file matched its own duplicate;
  * the duplicate has been removed and the pinned digest is the guard.
  *
- * CHANGED ONCE, DELIBERATELY. The freeze was lifted for exactly three data
- * bindings, each of which replaced a hardcoded display value with a read from
- * SNAPSHOT. No layout, styling or design was touched:
+ * The pin has been re-cut three times, each for a deliberate, listed reason.
+ * Every one replaced a hardcoded value with a read from SNAPSHOT, or moved a
+ * control; no layout or styling was redesigned:
  *   1. `of 24`              -> `of ${SNAPSHOT.skills.length}`
  *   2. `0 project-local resources` -> derived from the project arrays
  *   3. `SNAPSHOT.providers[0]` in the model drawer -> `D.data.provider`
+ *   4. Reset moved into the filter bar; Share added as a real control
+ *   5. Share repayloaded from one config file to the whole snapshot
  * The test below re-pins the digest, so any FUTURE edit is caught again.
  */
-const PINNED = '26d1013af5329658ba9ac9a52b4f8734fe1a88198623b6e20f821f30bd4cb3ff';
+const PINNED = 'f2edca48a7cab1b80defe073af3d896399159c39978ab9f32832fe5c3b68bc07';
 
 test('template SHA-256 matches the pinned hash', () => {
   assert.ok(fs.existsSync(TEMPLATE), 'template must exist');

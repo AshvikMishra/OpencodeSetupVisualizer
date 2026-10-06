@@ -136,7 +136,11 @@ export function createBrowserStub() {
 export function runTemplate(html) {
   const { documentStub, windowStub, navigatorStub, byId } = createBrowserStub();
 
-  const m = /<script>\n([\s\S]*?)\n<\/script>/.exec(html);
+  // Tolerate CRLF. A hard-coded \n silently matched nothing when the template
+  // was saved with Windows line endings, and every test that renders a page
+  // failed with "could not locate the main inline script block" rather than
+  // pointing at the real cause.
+  const m = /<script[^>]*>\r?\n([\s\S]*?)\r?\n<\/script>/.exec(html);
   if (!m) throw new Error('could not locate the main inline script block');
   const code = m[1];
 

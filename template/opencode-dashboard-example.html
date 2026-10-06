@@ -124,6 +124,12 @@
   .scrim{position:fixed; inset:0; background:rgba(4,6,10,.66); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px);
     z-index:55; opacity:0; visibility:hidden; transition:opacity .3s, visibility .3s}
   .scrim.open{opacity:1; visibility:visible}
+  /* the share sheet owns its own overlay: #scrim's open/close state belongs to
+     the drawer, and a modal that shared it would fight openDrawer/closeDrawer */
+  .modal{position:fixed; inset:0; z-index:70; display:grid; place-items:center; padding:1rem;
+    background:rgba(4,6,10,.66); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px);
+    opacity:0; visibility:hidden; transition:opacity .3s, visibility .3s}
+  .modal.open{opacity:1; visibility:visible}
 
   .kv{display:grid; grid-template-columns:minmax(104px,auto) 1fr; gap:.4rem .9rem; font-size:.8rem}
   .kv dt{color:var(--ink-3); font-family:var(--mono); font-size:.7rem; letter-spacing:.05em; text-transform:uppercase; padding-top:.12rem}
@@ -172,6 +178,9 @@
         <button class="btn" id="btnRefresh" title="Re-run in-page filters and search">
           <i data-lucide="rotate-cw" class="h-4 w-4" aria-hidden="true"></i><span class="hidden sm:inline">Reset</span>
         </button>
+        <button class="btn" id="btnShare" title="Share this setup: copy the whole sanitized snapshot as JSON, copy a prompt that asks for a setup like this one, or download the file">
+          <i data-lucide="share-2" class="h-4 w-4" aria-hidden="true"></i><span class="hidden sm:inline">Share</span>
+        </button>
       </div>
     </div>
 
@@ -211,6 +220,50 @@
     <span class="mono text-slate-500" id="snapStamp"></span>
   </div>
 </footer>
+
+<div class="modal" id="shareModal" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+  <div class="glass pop w-full max-w-md overflow-hidden">
+    <div class="flex items-start gap-3 border-b border-white/10 px-5 py-4">
+      <i data-lucide="share-2" class="mt-0.5 h-4 w-4 flex-none text-cyan-300" aria-hidden="true"></i>
+      <div class="min-w-0 flex-1">
+        <h2 class="text-[15px] font-semibold tracking-tight" id="shareTitle">Share this setup</h2>
+        <p class="sub mt-1 text-[12.5px]" id="shareSrc">&hellip;</p>
+      </div>
+      <button class="btn !min-h-[30px] !px-2" id="shareClose" aria-label="Close share dialog">
+        <i data-lucide="x" class="h-4 w-4" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div class="grid gap-2 p-5">
+      <button class="btn !min-h-[64px] !justify-start !px-3.5 !py-3 text-left" id="shareJson">
+        <i data-lucide="file-code" class="h-4 w-4 flex-none" aria-hidden="true"></i>
+        <span class="min-w-0">
+          <span class="block text-[13px] font-medium text-slate-100">Copy snapshot JSON</span>
+          <span class="block text-[11.5px] text-slate-400" id="shareJsonHint">&hellip;</span>
+        </span>
+      </button>
+      <button class="btn !min-h-[64px] !justify-start !px-3.5 !py-3 text-left" id="sharePrompt">
+        <i data-lucide="terminal-square" class="h-4 w-4 flex-none" aria-hidden="true"></i>
+        <span class="min-w-0">
+          <span class="block text-[13px] font-medium text-slate-100">Copy prompt</span>
+          <span class="block text-[11.5px] text-slate-400">A ready-to-paste prompt asking for a setup like this one</span>
+        </span>
+      </button>
+      <button class="btn !min-h-[64px] !justify-start !px-3.5 !py-3 text-left" id="shareDownload">
+        <i data-lucide="download" class="h-4 w-4 flex-none" aria-hidden="true"></i>
+        <span class="min-w-0">
+          <span class="block text-[13px] font-medium text-slate-100">Download .json</span>
+          <span class="block text-[11.5px] text-slate-400">Save it as a file &mdash; pasting 30 KB of JSON into a chat mangles it</span>
+        </span>
+      </button>
+    </div>
+    <p class="border-t border-white/10 px-5 py-3 text-[11.5px] leading-snug text-slate-500">
+      <i data-lucide="shield-check" class="mr-1 inline h-3.5 w-3.5 text-emerald-400" aria-hidden="true"></i>
+      Nothing is uploaded &mdash; it goes to your clipboard or a file on disk, and secrets stay redacted.
+      This is the whole snapshot, so it also carries your skill names, the git URLs your skills came
+      from, your model IDs and your token costs. Read it before you send it.
+    </p>
+  </div>
+</div>
 
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="dwTitle" tabindex="-1">
@@ -596,7 +649,7 @@ SNAPSHOT.providers.forEach(p => p.modelList.forEach(m => push({
 }));
 
 /* ============================== state ============================== */
-const S = { q:'', filters:new Set(), view:'grid', open:false, lastFocus:null };
+const S = { q:'', filters:new Set(), view:'grid', open:false, modal:false, lastFocus:null };
 const CATS = [
   {k:'agents',     label:'Agents',    icon:'bot'},
   {k:'skills',     label:'Skills',    icon:'sparkles'},
@@ -1410,6 +1463,146 @@ async function copyText(text, label){
   toast(ok ? label + ' copied' : 'Copy blocked by browser — select the text manually');
 }
 
+/* ============================== share ============================== */
+/* Both options read the OpenCode config file the Config Inspector already
+   captured, so the bytes are exactly what the dashboard is showing: sanitized,
+   path-normalized, and never re-derived. The example dashboard names it
+   `opencode.json`; a real run names it `opencode.json` (id `global-opencode`)
+   or `project/opencode.json`, and opencode.jsonc counts as the same file. */
+const OPENCODE_CONFIG_NAME = /(^|\/)opencode\.jsonc?$/i;
+
+/** Does this snapshot still carry file bodies, or were they hidden? */
+function bodiesHidden(){
+  const list = (SNAPSHOT && SNAPSHOT.configs) || [];
+  return list.some(c => /^\(contents hidden/.test(c.body || ''));
+}
+
+/**
+ * The share payload is the WHOLE snapshot, not one config file.
+ *
+ * It used to be `configs[].body` for `opencode.json` alone, which copied 139
+ * bytes and called itself "share your setup" — the config file is the least
+ * interesting part of a setup. The snapshot already carries every agent,
+ * skill, plugin, provider, model, config body and measured token cost, and it
+ * reaches this page already sanitized, so it is exactly what `--json` emits.
+ * Serialized identically so the button and the flag cannot drift.
+ */
+function sharePayload(){
+  if (!SNAPSHOT || typeof SNAPSHOT !== 'object') {
+    return { ok:false, why:'This page has no snapshot to share.' };
+  }
+  let json;
+  try {
+    json = JSON.stringify(SNAPSHOT, null, 2);
+  } catch (e) {
+    return { ok:false, why:'The snapshot could not be serialized: ' + e.message };
+  }
+  if (!json || json === '{}') {
+    return { ok:false, why:'The snapshot is empty, so there is nothing to share.' };
+  }
+  // `--no-contents` does NOT block sharing. The inventory — skill names,
+  // plugin sources, models, token costs — is the part worth passing on, so
+  // this is offered as a labelled partial artifact rather than refused.
+  const partial = bodiesHidden();
+  const kb = Math.round(json.length / 1024);
+  const counts = [
+    (SNAPSHOT.agents || []).length + ' agent(s)',
+    (SNAPSHOT.skills || []).length + ' skill(s)',
+    (SNAPSHOT.plugins || []).length + ' plugin(s)',
+    (SNAPSHOT.providers || []).length + ' provider(s)',
+    (SNAPSHOT.configs || []).length + ' config file(s)',
+  ].join(', ');
+  return {
+    ok: true,
+    json,
+    partial,
+    bytes: json.length,
+    counts,
+    kb,
+  };
+}
+function sharePromptText(s){
+  const lines = [
+    'Here is a real, working OpenCode setup, captured from a live machine.',
+    'It was collected read-only and sanitized before it was given to me: secrets are',
+    'redacted and home directories are written as %USERPROFILE%, so substitute the real',
+    'path for your machine.',
+    '',
+    `Inventory: ${s.counts}.`,
+  ];
+  if (s.partial) {
+    lines.push(
+      '',
+      'NOTE: this snapshot was collected with --no-contents, so config file BODIES are',
+      'not included — only their paths and sizes. Everything else is complete.'
+    );
+  }
+  lines.push(
+    '',
+    'What I want: a setup of roughly this shape for my own machine.',
+    '',
+    '1. Read the snapshot and tell me what it implies about scale and cost.',
+    '2. Write the config files it describes, creating parent directories as needed.',
+    '3. Note anything in it you would do differently, and why.',
+    '4. List the skills and plugins it references that I would need to install, and',
+    '   where each one comes from.',
+    '',
+    'Do not invent resources that are not in the snapshot, and do not fill gaps with',
+    'plausible-looking defaults — if something is absent, say it is absent.',
+    '',
+    '```json',
+    s.json,
+    '```'
+  );
+  return lines.join('\n');
+}
+/** Trigger a file download of the payload. Pure client side, no network. */
+function downloadSnapshot(){
+  const p = sharePayload();
+  if (!p.ok) return false;
+  const blob = new Blob([p.json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'opencode-setup-snapshot.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoke on the next tick so the navigation has started.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+  return true;
+}
+function openShare(){
+  const p = sharePayload();
+  S.modal = true;
+  S.lastFocus = document.activeElement;
+  const src = document.getElementById('shareSrc');
+  const hint = document.getElementById('shareJsonHint');
+  src.textContent = p.ok
+    ? (p.counts + ' — ' + p.kb + ' KB' + (p.partial ? ' · partial' : ''))
+    : p.why;
+  if (hint) {
+    hint.textContent = p.ok
+      ? (p.partial
+          ? 'Partial: file bodies were hidden with --no-contents'
+          : 'The complete snapshot, identical to what --json prints')
+      : 'Nothing to share';
+  }
+  for (const id of ['shareJson', 'sharePrompt', 'shareDownload']) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !p.ok;
+  }
+  document.getElementById('shareModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  (p.ok ? document.getElementById('shareJson') : document.getElementById('shareClose')).focus();
+}
+function closeShare(){
+  document.getElementById('shareModal').classList.remove('open');
+  S.modal = false;
+  document.body.style.overflow = '';
+  if (S.lastFocus && S.lastFocus.focus) S.lastFocus.focus();
+}
+
 /* ============================== icons + filters ============================== */
 function icons(){ if (window.lucide) lucide.createIcons(); }
 function buildFilters(){
@@ -1461,6 +1654,23 @@ document.addEventListener('click', e => {
 
   if (e.target.closest('#dwClose') || e.target.closest('#scrim')) closeDrawer();
   if (e.target.closest('#btnRefresh')) resetAll();
+
+  /* share sheet — reads the payload at click time, never a stale copy */
+  const shareBtn = e.target.closest('#btnShare, #shareJson, #sharePrompt, #shareDownload, #shareClose');
+  if (shareBtn){
+    if (shareBtn.id === 'btnShare') openShare();
+    else if (shareBtn.id === 'shareClose') closeShare();
+    else if (shareBtn.id === 'shareDownload'){
+      if (downloadSnapshot()) toast('Snapshot saved');
+    }
+    else {
+      const p = sharePayload();
+      if (p.ok) copyText(shareBtn.id === 'shareJson' ? p.json : sharePromptText(p),
+                         shareBtn.id === 'shareJson' ? 'Snapshot JSON' : 'Prompt');
+    }
+    return;
+  }
+  if (e.target.id === 'shareModal'){ closeShare(); return; }  /* backdrop */
   if (e.target.closest('#vGrid')) setView('grid');
   if (e.target.closest('#vGraph')) setView('graph');
   if (e.target.closest('#empty button')) resetAll();
@@ -1489,8 +1699,8 @@ document.getElementById('q').addEventListener('input', e => {
 document.getElementById('q').addEventListener('keydown', e => { if (e.key==='Escape' && e.target.value){ e.target.value=''; S.q=''; render(); } });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape'){ if (S.open) closeDrawer(); return; }
-  if (e.key === '/' && !S.open && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)){ e.preventDefault(); document.getElementById('q').focus(); }
+  if (e.key === 'Escape'){ if (S.modal) closeShare(); else if (S.open) closeDrawer(); return; }
+  if (e.key === '/' && !S.open && !S.modal && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)){ e.preventDefault(); document.getElementById('q').focus(); }
   trapFocus(e);
   if ((e.key==='Enter'||e.key===' ') && e.target.classList?.contains('gnode')){ e.preventDefault(); e.target.dispatchEvent(new MouseEvent('click',{bubbles:true})); }
 });

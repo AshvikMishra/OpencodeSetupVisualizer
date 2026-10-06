@@ -82,7 +82,9 @@ test('script-safe: a BOM cannot sit at the very start of the injected script', (
 
 test('the injected page is valid JavaScript when evaluated', () => {
   const out = inject(HTML, { meta: { generated: '2026-01-01' }, evil: '</script>' });
-  const m = /<script>\n([\s\S]*?)\n<\/script>/.exec(out);
+  // Tolerate CRLF: the template is a text file and must not dictate how it is
+  // read back. A hard-coded \n matched nothing on a CRLF save.
+  const m = /<script[^>]*>\r?\n([\s\S]*?)\r?\n<\/script>/.exec(out);
   assert.ok(m, 'could not locate the main script block');
   // Syntax-check only: do not execute (it touches document).
   new vm.Script(m[1]);

@@ -30,7 +30,11 @@
     "verify:packaging": "node verification/packaging.mjs",
     "audit:prepush": "node verification/prepush-audit.mjs",
     "audit:mutation": "node verification/audit-mutation.mjs",
-    "verify:browser": "node verification/browser.mjs"
+    "verify:browser": "node verification/browser.mjs",
+    "verify:share": "node verification/share-mutations.mjs",
+    "verify:share-scan": "node verification/share-payload-scan.mjs",
+    "verify:runall-exit": "node verification/runall-exit.mjs",
+    "verify:lines": "node --test test/line-endings.test.js"
   },
   "keywords": [
     "opencode",

@@ -112,7 +112,7 @@ try {
   // Re-pinned alongside test/template-integrity.test.js after the freeze was lifted
   // for three data bindings (skill total, project-local count, model provider).
   // Both files must carry the same constant or one of them is lying.
-  const PINNED = '26d1013af5329658ba9ac9a52b4f8734fe1a88198623b6e20f821f30bd4cb3ff';
+  const PINNED = 'f2edca48a7cab1b80defe073af3d896399159c39978ab9f32832fe5c3b68bc07';
   const h1 = fs.existsSync(tplInTgz) ? sha256(tplInTgz) : null;
   const h2 = sha256(original);
   record('template inside the tarball matches the pinned original',
